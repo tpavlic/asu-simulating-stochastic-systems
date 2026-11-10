@@ -168,7 +168,9 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      values measured exactly, continuous values rounded when recorded (Phone IVR service times,
      whole seconds, and Machine setup times, to the half minute), continuous values best fit with
      truncated distributions (Tool wear per shift, a normal(1, 1.2) truncated below zero, whose
-     `hint` names the setting that shows it), and discrete counts. The Phone IVR sample loads as
+     `hint` names the setting that shows it), continuous values with a block of zeros (Rework
+     time per part, 108 zeros among 200, the rest a gamma(2, 2.5); its hint points to the zeros'
+     box), and discrete counts. Every tab labels its samples "Sample data". The Phone IVR sample loads as
      counts, its count note points to Continuous with the shift, and once Family is Continuous the
      note says each value is fitted as the range it was rounded from (`renderStats` reruns when
      Family changes).*
@@ -256,7 +258,26 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      the cut functions against each other and the truncated normal's closed forms, the limits,
      the minimum hold, exact zeros, ranges, the mirror image, and the bootstrap's calibration (a
      cut normal and a cut gamma at 4.0% to 5.5%, and data recorded to 0.1 with exact zeros in the
-     default mode at 6.0% (K–S) and 8.0% (A–D), against a nominal 5%).)*
+     default mode at 6.0% (K–S) and 8.0% (A–D), against a nominal 5%).*
+  12. *Exact zeros can be set aside as a lump at 0 (`#lump-chk` under the data, offered by
+     `lumpInfo` when the values are continuous, none is below 0, at least one is exactly 0, and at
+     least two are above it; off on every new load). `ST.xAll` and `ST.sAll` hold every value and
+     feed the data cards; `applyLump` sets `ST.x` and `ST.s`, which everything else reads, to the
+     values above 0 while the box is ticked. The fits, tests, bootstrap, plots, scripts, and the
+     data CSV (whose header says so) then see only those values; `withZeroLump` (core) writes the
+     lump into every tool's line, with one uniform for it (Arena's comparison as 0 or 1, Simio's
+     `Math.If`, AnyLogic's ternary, R's `ifelse`, MATLAB's mask, NumPy's `where`, SciPy's frozen
+     model drawn with `rvs` first), and the scripts open by saying the zeros were set aside.
+     `lumpNote` states p0 and the mean with the zeros, or, while the box is clear, suggests it
+     when three or more exact zeros sit in values recorded exactly (a continuous model gives 0 no
+     probability; the model itself is no guide, since a beta or gamma with a shape below 1 piles
+     its density against 0 to reach them), or, for a range fit, when the zeros outnumber the 0
+     range's expected count. A fit made with the zeros set aside is not handed to tab ③ or ④,
+     which cannot draw the lump. On exact values, a truncated beta's lower end stays a thousandth
+     of the range below the smallest value, as the shifted families' starts do: on a block of
+     zeros it otherwise ran up to within 1e-317 of 0, where the likelihood has no maximum. Section
+     16f of the verify checks the lines' form, draws from the AnyLogic line as JavaScript and from
+     the R and Python lines (share of zeros and the rest against the model), and that beta.)*
 - `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated

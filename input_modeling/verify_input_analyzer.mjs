@@ -2478,6 +2478,74 @@ section('16e. models cut off at zero');
 }
 
 /* ══════════════════════════════════════════════════════════════════════
+   16f. EXACT ZEROS SET ASIDE
+
+   The page fits the values above 0 and writes a lump at 0, with
+   probability n0/n, into every tool's line (withZeroLump). The checks: the
+   lines' form in each tool, and draws from the AnyLogic line (as
+   JavaScript) and the R and Python lines, whose share of zeros and whose
+   values above 0 must match the lump and the model. Also the truncated
+   beta's lower end, which on exact zeros has to stay clear of 0.
+   ══════════════════════════════════════════════════════════════════════ */
+section('16f. exact zeros set aside');
+{
+  const D = IA.DISTS, u = IA.MRG32k3a(16900), above = [];
+  for (let i = 0; i < 150; i++) above.push(Number((D.gamma.sample(u, [2, 1.5]) + 0.01).toFixed(2)));
+  const n0 = 20, n = above.length + n0, p0 = n0 / n;
+  const withZeros = Array(n0).fill(0).concat(above);
+
+  /* A block of exact zeros, every family truncated below zero for them: the
+     beta's lower end stays a thousandth of the range below 0, and its lines
+     are written in plain decimals. */
+  const fb = IA.fitDist(D.beta, withZeros, false, false, null, null, false, { floor0: true });
+  const range = Math.max(...withZeros);
+  ok(fb.ok && Number.isFinite(fb.ll) && fb.p[2] <= -1e-3 * range + 1e-12 && !/\de[-+]?\d/.test(IA.expressions(fb).arena),
+     `on a block of zeros, the truncated beta's lower end, ${fb.ok ? fb.p[2].toExponential(3) : '-'}, stays clear of 0, ` +
+     'and its Arena line has no e-notation');
+
+  const fg = IA.fitDist(D.gamma, above, true, false, null, null, false, { floor0: true });
+  const ex = IA.withZeroLump(IA.expressions(fg), n0, n), P = IA.num(p0, 10);
+  ok(ex.arena === '(UNIF(0, 1) >= ' + P + ') * (' + IA.expressions(fg).arena + ')' &&
+     /^Math\.If\(Random\.Uniform\(0, 1\) < /.test(ex.simio) && /^\(uniform\(0, 1\) < .* \? 0\.0 : /.test(ex.anylogic) &&
+     /^ifelse\(runif\(n\) < /.test(ex.r) && /^\(rand\(n, 1\) >= .*\) \.\* \(/.test(ex.matlab) &&
+     /^np\.where\(np\.random\.rand\(n\) < .*\.rvs\(size=n\)\)$/.test(ex.python),
+     'each tool\'s line draws 0 with probability n0/n and the model otherwise; SciPy\'s frozen model is drawn with rvs');
+  ok(['arena', 'simio', 'anylogic', 'r', 'matlab', 'python'].every(t => ex.notes[t].startsWith('With probability ' + P)),
+     'and each note says so first');
+
+  /* The AnyLogic line of an exact truncated Weibull, run as JavaScript, on
+     values from a normal(1, 1.2) truncated below zero. */
+  const uw = IA.MRG32k3a(16905), tn = [];
+  while (tn.length < 150) { const v = 1 + 1.2 * D.normal.sample(uw, [0, 1]); if (v >= 0.005) tn.push(Number(v.toFixed(2))); }
+  const fw = IA.fitDist(D.weibull, tn, true, false, null, null, false, { floor0: true, cut0: true });
+  const exw = IA.withZeroLump(IA.expressions(fw), n0, n), ur = IA.MRG32k3a(16910);
+  const fn = new Function('uniform', 'return ' + exw.anylogic), draws = [];
+  for (let i = 0; i < 40000; i++) draws.push(fn(() => ur()));
+  const zeros = draws.filter(v => v === 0).length, rest = draws.filter(v => v !== 0).sort((a, b) => a - b);
+  const zse = Math.sqrt(p0 * (1 - p0) / draws.length), ksw = IA.ksStat(rest, IA.fitCdf(fw), () => 0).D;
+  ok(IA.isCut(fw) && Math.abs(zeros / draws.length - p0) < 4 * zse && ksw < 1.63 / Math.sqrt(rest.length),
+     `AnyLogic's line for a truncated Weibull with a lump: ${(100 * zeros / draws.length).toFixed(2)}% zeros ` +
+     `(lump ${(100 * p0).toFixed(2)}%), and the rest match the model (D = ${ksw.toFixed(4)})`);
+
+  /* The R and Python lines, 200000 draws each. */
+  const Q = IA.fitQuantile(fg), qs = [0.05, 0.25, 0.5, 0.75, 0.95];
+  const want = qs.map(q => Q(q)), spread = want[3] - want[1];
+  for (const [lang, cmd, args, ext, code] of [
+    ['R', 'Rscript', ['--vanilla'], 'R', 'set.seed(1); n <- 200000\nx <- ' + ex.r +
+      '\ny <- x[x != 0]\ncat(mean(x == 0), quantile(y, c(' + qs.join(',') + '), names = FALSE))\n'],
+    ['Python', 'python3', ['-I'], 'py', 'import numpy as np\nfrom scipy import stats\nnp.random.seed(1); n = 200000\nx = ' + ex.python +
+      '\ny = x[x != 0]\nprint(np.mean(x == 0), *np.quantile(y, [' + qs.join(',') + ']))\n']]) {
+    const res = runScript(cmd, args, code, ext);
+    if (!res) { console.log(`  (skipped: ${lang} is not installed)`); continue; }
+    const v = res.out.trim().split(/\s+/).map(Number);
+    const err = v.length === 6 ? Math.max(...want.map((w, i) => Math.abs(v[i + 1] - w))) / spread : NaN;
+    ok(res.status === 0 && Math.abs(v[0] - p0) < 4 * Math.sqrt(p0 * (1 - p0) / 200000) && err < 0.02,
+       `${lang}'s line for a gamma with a lump: ${(100 * v[0]).toFixed(2)}% zeros (lump ${(100 * p0).toFixed(2)}%), ` +
+       `the rest within ${(100 * err).toFixed(2)}% of the spread of the model's quantiles`, res.out.slice(-300));
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
    17. ARRIVAL PROCESSES
    ══════════════════════════════════════════════════════════════════════ */
 section('17. arrival-process analysis');

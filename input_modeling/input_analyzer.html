@@ -170,6 +170,10 @@ input[type="range"] { accent-color: var(--accent); cursor: pointer; vertical-ali
        font-size: .82rem; font-weight: 600; color: var(--muted); cursor: pointer; }
 .chk input { accent-color: var(--accent); cursor: pointer; margin: 0; }
 .chk.off { opacity: .5; cursor: not-allowed; }
+/* The zeros' box carries a sentence, and so it wraps, its box beside the
+   first line. */
+#lump-row .chk { white-space: normal; align-items: flex-start; line-height: 1.4; }
+#lump-row .chk input { margin-top: 1px; flex: none; }
 /* .chk is nowrap, which is right for a two-word label and wrong for this
    one: at a narrow width the shift label has to be allowed to wrap rather
    than push the whole page sideways. */
@@ -636,7 +640,7 @@ footer a:hover { text-decoration: underline; }
       </div>
       <div class="data-tools">
         <div class="samples">
-          <label class="file-lbl" for="sample-pick" style="align-self:center">Sample:</label>
+          <label class="file-lbl" for="sample-pick" style="align-self:center">Sample data:</label>
           <select id="sample-pick" class="sample-pick" autocomplete="off">
             <optgroup label="Continuous values, measured exactly">
               <option value="iat">Clinic interarrivals</option>
@@ -650,6 +654,9 @@ footer a:hover { text-decoration: underline; }
             </optgroup>
             <optgroup label="Continuous values best fit with truncated distributions">
               <option value="wear">Tool wear per shift (microns)</option>
+            </optgroup>
+            <optgroup label="Continuous values with a block of zeros">
+              <option value="rework">Rework time per part (minutes; most parts need none)</option>
             </optgroup>
             <optgroup label="Discrete counts">
               <option value="dem">Parts demand (counts)</option>
@@ -711,6 +718,9 @@ footer a:hover { text-decoration: underline; }
         <div class="hint" id="data-kind" style="margin-top:10px">
           Load some data to begin. The samples are synthetic, generated from known
           distributions, so that you can check whether the fit recovers what went in.
+        </div>
+        <div id="lump-row" style="display:none;margin-top:8px">
+          <label class="chk"><input type="checkbox" id="lump-chk" autocomplete="off"> <span id="lump-txt"></span></label>
         </div>
         <details class="why vals" id="uniq-wrap" style="display:none">
           <summary id="uniq-sum">The distinct values</summary>
@@ -1321,7 +1331,7 @@ footer a:hover { text-decoration: underline; }
       </div>
       <div class="data-tools">
         <div class="samples">
-          <span class="file-lbl" style="align-self:center">Samples:</span>
+          <span class="file-lbl" style="align-self:center">Sample data:</span>
           <button class="btn2" data-asample="steady" type="button">Steady arrivals</button>
           <button class="btn2" data-asample="rush" type="button">Lunch rush</button>
           <button class="btn2" data-asample="clock" type="button">Clock times</button>
@@ -1732,7 +1742,7 @@ footer a:hover { text-decoration: underline; }
       </div>
       <div class="data-tools">
         <div class="samples">
-          <span class="file-lbl" style="align-self:center">Samples:</span>
+          <span class="file-lbl" style="align-self:center">Sample data:</span>
           <button class="btn2" data-psample="checkout" type="button">Grocery checkout</button>
           <button class="btn2" data-psample="ushape" type="button">Line speed and rework</button>
         </div>
@@ -2057,7 +2067,7 @@ footer a:hover { text-decoration: underline; }
       </div>
       <div class="data-tools">
         <div class="samples">
-          <span class="file-lbl" style="align-self:center">Samples:</span>
+          <span class="file-lbl" style="align-self:center">Sample data:</span>
           <button class="btn2" data-ssample="orders" type="button">Hourly orders</button>
           <button class="btn2" data-ssample="tank" type="button">Tank temperature</button>
           <button class="btn2" data-ssample="service" type="button">Service times in order</button>
@@ -5386,10 +5396,15 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   var dLow = D_SAFE_FRAC * range;
   /* The start's limit: just below the smallest value (or below 0, where
      the model stops being cut), and for a mirror image just above the
-     largest; a beta's lower end stays below the ordinary fit's. */
+     largest; a beta's lower end stays below the ordinary fit's, and on
+     values recorded exactly also that same gap below the smallest value.
+     Without the gap, a beta with a first shape below 1 and exact zeros in
+     the data ran its lower end up to within 1e-317 of 0, where its density
+     at the zeros, and so the likelihood, grows without limit. */
   var gHi = rec ? 0 : Math.min(0, s.min - dLow);
   var cLo = rec ? C.bottom : s.max + dLow;
   var Lcap = dist.key === 'beta' && base.ok ? base.p[2] : null;
+  if (dist.key === 'beta' && !rec) Lcap = Math.min(Lcap === null ? Infinity : Lcap, s.min - dLow);
   var cap = cutCap(dist);
 
   function keepOf(p, g) {
@@ -6901,6 +6916,35 @@ function cutExpressions(fit, sample) {
           'do { v = <the line>; } while (v < 0); return v;';
     out.notes[t] = head + how + '; that takes ' + avg + ' draws on average. Used alone, the line keeps the ' +
       pct + '% below zero.';
+  });
+  return out;
+}
+
+/* Every tool's line with the data's exact zeros set aside as a lump: 0 with
+   probability p0 (n0 zeros among n values), and otherwise a draw from the
+   model fitted to the values above 0. Each line draws one uniform for the
+   lump; Arena's comparison is 0 or 1, and SciPy's frozen distribution is
+   drawn with rvs first. A line that is a model before truncation, drawn
+   again until it is at or above 0, keeps that loop inside the parentheses. */
+function withZeroLump(ex, n0, n) {
+  var p0 = n0 / n, P = num(p0, 10);
+  var out = { notes: {}, exact: ex.exact ? Object.assign({}, ex.exact) : undefined };
+  var frozen = function (e) { return /^stats\.[a-z_]+\(.*\)$/.test(e) && e.indexOf('.rvs(') < 0; };
+  var wrap = {
+    arena: function (e) { return '(UNIF(0, 1) >= ' + P + ') * (' + e + ')'; },
+    simio: function (e) { return 'Math.If(Random.Uniform(0, 1) < ' + P + ', 0, ' + e + ')'; },
+    anylogic: function (e) { return '(uniform(0, 1) < ' + P + ' ? 0.0 : ' + e + ')'; },
+    r: function (e) { return 'ifelse(runif(n) < ' + P + ', 0, ' + e + ')'; },
+    matlab: function (e) { return '(rand(n, 1) >= ' + P + ') .* (' + e + ')'; },
+    python: function (e) { return 'np.where(np.random.rand(n) < ' + P + ', 0.0, ' + (frozen(e) ? e + '.rvs(size=n)' : e) + ')'; }
+  };
+  var lead = 'With probability ' + P + ' (the ' + n0 + ' zero' + (n0 === 1 ? '' : 's') + ' among ' + n +
+    ' values) the draw is 0; otherwise it comes from the model fitted to the values above 0. ';
+  ['arena', 'simio', 'anylogic', 'r', 'matlab', 'python'].forEach(function (t) {
+    out[t] = ex[t] ? wrap[t](ex[t]) : ex[t];
+    var loop = ex.exact && ex.exact[t] === false
+      ? 'Draw the part in parentheses again until it is at or above 0, as below, before the lump decides. ' : '';
+    out.notes[t] = ex[t] ? lead + loop + (ex.notes[t] || '') : ex.notes[t];
   });
   return out;
 }
@@ -10424,7 +10468,7 @@ var IA = {
   rateMLE: rateMLE, chiSqQuantile: chiSqQuantile,
   ARRIVAL_PROCESSES: ARRIVAL_PROCESSES, ARRIVAL_KEYS: ARRIVAL_KEYS,
   validateArrivalParams: validateArrivalParams, generateArrivals: generateArrivals,
-  expressions: expressions, reproScripts: reproScripts, FIT_NAMES: FIT_NAMES, arenaGamma: arenaGamma,
+  expressions: expressions, withZeroLump: withZeroLump, reproScripts: reproScripts, FIT_NAMES: FIT_NAMES, arenaGamma: arenaGamma,
   ARENA_DISC_MAX: ARENA_DISC_MAX,
   rowValues: rowValues, pairedColumns: pairedColumns, ranks: ranks, tTwoSided: tTwoSided, tQuantile2: tQuantile2,
   pairCorr: pairCorr, pearson: pearson, spearman: spearman, kendallTauB: kendallTauB,
@@ -10526,6 +10570,23 @@ var SAMPLES = {
     0.45,1.61,3.01,1.94,1.48,0.19,0.51,2.02,1.8,2.28,0.35,1.64,2.9,1.79,2.26,1.42,0.67,0.73,
     1.93,0.76,0.78,2.61,1.12,2.47,0.66,1.02,0.1,0.69,3.72,1.49,2.09,0.58,1.74,0.52,1.45,1.84,
     0.17,0.93,1.95,1.43,2.64,0.92
+  ] },
+  /* 108 of 200 parts need no rework, and the rest take a gamma(2, 2.5)
+     number of minutes. With the zeros set aside, the gamma ranks first by
+     AIC on the 92 values above 0; left in, every model reaches for them by
+     piling its density up against 0. */
+  rework: { name: "Rework time per part (minutes; most parts need none)",
+    unit: "minutes of rework per inspected part, 0 for a part that passed",
+    hint: 'Tick the box under these notes that sets the zeros aside, and compare the ranking with and without it.',
+    v: [
+    0,0,1.21,16.47,0,0,0,3.52,0,0,21.79,9.35,0,3.49,0,0,0,0,3.86,0,0,0,0,0,3.03,
+    1.43,2.49,0,4.47,0,1.43,7.56,0,0.98,1.82,0,0,0,6.68,0,5.51,10.99,0,6.84,0,0,0,3.23,0,6.63,
+    0,0,0,0,5.19,2.02,1.26,5.69,5.83,0,0,0,0,0,0,0,0,5.01,0,6.35,0,5.62,0,1.24,0,
+    0,0,7.15,0,0,11.27,9.74,3.78,0,0,12.33,0.06,0,5.54,0,0,0.56,0,9.21,0,0,6.69,0,0,0,
+    0,0,5.6,6.35,9.23,6.32,2.31,0,0,0,3.14,4.63,0,3.1,0,0,2.12,0,0.52,0,0,0,6.6,2.08,0,
+    1.24,0,0,0,2.43,0,0,6.73,0,2.34,5.94,0,0,0,2.23,0,3.93,0,2.06,1.97,7.37,4.01,0,3.72,1.31,
+    0,0,0,0,7.38,1.95,0,1.19,2.22,12.74,2.97,3.09,0.36,0,0,0,6.63,0,3.02,8.58,4.59,2.2,0,8.77,10.62,
+    5.76,0,0,0,0,0,4.42,5.14,0,2.75,3.2,0,0,0,5.35,0,2.55,5.57,11.03,0,0,0,1.82,3.51,6.14
   ] },
   /* Recorded to the whole second, and so tied: the page reads these as
      counts until Family is set to Continuous, and then fits each value as
@@ -11005,8 +11066,11 @@ function tickPair(lo, hi, target) {
 var ST = {
   table: null,      /* parseTable() result for tab 1                   */
   col: 0,
-  x: [],            /* the numeric values in play                      */
+  x: [],            /* the numeric values fitted: every value, or those above 0 while the zeros are set aside */
   s: null,          /* summarize(x)                                    */
+  xAll: [],         /* every value loaded, zeros included              */
+  sAll: null,       /* summarize(xAll), which the data cards describe  */
+  lump: false,      /* set the exact zeros aside as a lump at 0        */
   unit: null,       /* description of a loaded sample, null if pasted  */
   clockConv: 'ms',  /* how to read a duration written as clock time    */
   clockUnit: null,  /* the unit that reading produced, when one was used */
@@ -11220,8 +11284,10 @@ var LOADER = makeLoader({
   accept: function (cv, sourceLabel) {
     cv = freqAccept(cv, sourceLabel);
     if (!cv) return;
-    ST.x = cv.values;
-    ST.s = ST.x.length ? IA.summarize(ST.x) : null;
+    ST.xAll = cv.values;
+    ST.sAll = ST.xAll.length ? IA.summarize(ST.xAll) : null;
+    ST.lump = false;
+    applyLump();
     ST.clockUnit = cv.clock ? cv.unit : null;
     $('clock-row').style.display = cv.clock ? 'flex' : 'none';
     if (cv.clock) {
@@ -11257,7 +11323,7 @@ var LOADER = makeLoader({
   },
   clear: function () {
     shiftForData(false);
-    ST.table = null; ST.x = []; ST.s = null; ST.rows = []; ST.pick = null;
+    ST.table = null; ST.x = []; ST.s = null; ST.xAll = []; ST.sAll = null; ST.rows = []; ST.pick = null;
     ST.gof = null; ST.unit = null; ST.clockUnit = null;
     ST.freq = { mode: 'obs', out: null };
     $('col-row').style.display = 'none';
@@ -11443,7 +11509,7 @@ function freqAccept(cv, sourceLabel) {
   if (!ex.error && ex.values.length < 2) ex.error = 'the counts add up to fewer than 2 observations';
   if (ex.error) {
     LOADER.say(pre + 'Could not read column “' + t.names[col] + '” as counts: ' + ex.error + '.', true);
-    ST.x = []; ST.s = null; ST.rows = []; ST.pick = null; ST.gof = null;
+    ST.x = []; ST.s = null; ST.xAll = []; ST.sAll = null; ST.rows = []; ST.pick = null; ST.gof = null;
     renderStats(); renderAllEmpty();
     return null;
   }
@@ -11479,8 +11545,38 @@ function sayShiftOff(why) {
   if (ST.shiftAutoOff) $('parse-msg').textContent += ' The location shift is now off: ' + why;
 }
 
+/* The data's exact zeros, when they can be set aside: continuous values,
+   none below 0, at least one exactly 0, and at least two above it. */
+function lumpInfo() {
+  var s = ST.sAll;
+  if (!s || s.min !== 0 || ST.family === 'discrete' || (ST.family === 'auto' && isDiscreteData(s))) return null;
+  var n0 = 0;
+  for (var i = 0; i < ST.xAll.length; i++) if (ST.xAll[i] === 0) n0++;
+  return ST.xAll.length - n0 >= 2 ? { n0: n0, n: ST.xAll.length, p0: n0 / ST.xAll.length } : null;
+}
+function lumpOn() { return ST.lump && !!lumpInfo(); }
+/* The values fitted: those above 0 while the zeros are set aside, and
+   every value otherwise. */
+function applyLump() {
+  if (lumpOn()) {
+    ST.x = ST.xAll.filter(function (v) { return v !== 0; });
+    ST.s = IA.summarize(ST.x);
+  } else {
+    ST.x = ST.xAll; ST.s = ST.sAll;
+  }
+}
+function renderLumpRow() {
+  var li = lumpInfo();
+  $('lump-row').style.display = li ? '' : 'none';
+  if (!li) return;
+  $('lump-chk').checked = ST.lump;
+  $('lump-txt').innerHTML = 'Set the ' + (li.n0 === 1 ? 'zero' : li.n0 + ' zeros') + ' (' + fmt(100 * li.p0, 3) +
+    '% of the values) aside: fit the ' + (li.n - li.n0) + ' values above 0, and draw 0 with probability ' +
+    IA.num(li.p0, 6) + ' in the exports';
+}
 function renderStats() {
-  var s = ST.s;
+  var s = ST.sAll;
+  renderLumpRow();
   var set = function (id, v) { $(id).textContent = v; };
   $('btn-dl-data').disabled = !s || !s.n;
   renderDistinct(s);
@@ -12445,6 +12541,7 @@ function renderFit() {
       'search, where the curve already matches that limit closely. The ' +
       (toGamma ? 'gamma' : 'Pearson type V') + ' row fits the limit itself, with one parameter fewer.</div>';
   }
+  pin += lumpNote(r);
   pin += rangeFitNote(r);
   pin += cutNote(r);
   pin += belowZeroNote(r);
@@ -12473,6 +12570,38 @@ function renderFit() {
 }
 /* What a fit to recorded ranges means, and why its ends can sit inside
    the recorded values. */
+/* The zeros set aside, or, while they are not, a block of zeros. A
+   continuous model puts no probability on 0 itself, and so on values
+   recorded exactly, three or more zeros are a block. On values fitted as
+   the ranges they stand for, a recorded 0 is a range of its own, and the
+   count to compare with is the one the model gives that range. The model
+   itself is no guide on values recorded exactly: a beta or a gamma with a
+   shape below 1 piles its density up against 0 to reach the zeros. */
+function lumpNote(r) {
+  var li = lumpInfo();
+  if (!li || !r.ok || r.noCriteria || r.dist.kind === 'discrete') return '';
+  var f = r.fit, P = IA.num(li.p0, 6);
+  if (lumpOn()) {
+    var m = IA.fitMean(f);
+    return '<div class="note quiet"><strong>Zeros set aside.</strong> ' + li.n0 + ' of your ' + li.n +
+      ' values (' + fmt(100 * li.p0, 3) + '%) are exactly 0. This model describes the ' + (li.n - li.n0) +
+      ' values above 0, and its tests score those alone. A simulation draws 0 with probability ' + P +
+      ' and otherwise from this model, as every line in section 6 does' +
+      (Number.isFinite(m) ? '. With the zeros, its draws average ' + fmt((1 - li.p0) * m, 5) +
+        ' (your values average ' + fmt(ST.sAll.mean, 5) + ')' : '') + '.' +
+      (ST.handoff ? ' A fit made this way is not sent back to tab ' + (ST.handoff.from === 'pair' ? '③' : '④') +
+        ', which has no way to draw the lump.' : '') + '</div>';
+  }
+  var expect = 0;
+  if (f.rec) { var sp = IA.recSpan(f.rec, 0), F = IA.fitCdf(f); expect = li.n * Math.max(0, F(sp[1]) - F(sp[0])); }
+  if (!(li.n0 >= 3 && li.n0 > 3 * expect + 2)) return '';
+  return '<div class="note"><strong>Your values include ' + li.n0 + ' exact zeros' +
+    (f.rec ? ', where this model would give about ' + fmt(expect, 2) : '') + '.</strong> ' +
+    (f.rec ? '' : 'A continuous model gives a value of exactly 0 no probability at all. ') + 'A block of zeros usually has a ' +
+    'cause of its own, such as a task that sometimes takes no time at all, or values stopped at a limit. ' +
+    'Tick the box under the data that sets the zeros aside to fit the values above 0 and draw 0 separately, ' +
+    'with probability ' + P + '.</div>';
+}
 function rangeFitNote(r) {
   var f = r.fit;
   if (!f.rec || r.noCriteria) return '';
@@ -14090,15 +14219,21 @@ var TOOLS = [
 /* The ranking CSV's Arena column: a cut model's line only when it draws the
    cut model itself, since the CSV has no room for the note on drawing again. */
 function arenaCell(fit) {
-  var ex = IA.expressions(fit);
+  var ex = lumpExpr(IA.expressions(fit));
   return ex.arena && (!IA.isCut(fit) || ex.exact.arena) ? ex.arena : '';
+}
+/* The lines with the zeros' lump written in, while the zeros are set aside. */
+function lumpExpr(ex) {
+  var li = lumpOn() ? lumpInfo() : null;
+  return li ? IA.withZeroLump(ex, li.n0, li.n) : ex;
 }
 function renderExport() {
   var r = pickedRow(), host = $('export-out');
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
-  var ex = IA.expressions(r.fit);
+  var ex = lumpExpr(IA.expressions(r.fit)), li = lumpOn() ? lumpInfo() : null;
   var h = '<div class="plot-hd">One draw from the fitted ' + esc(rowLower(r)) +
-          (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') + '</div>';
+          (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') +
+          (li ? ', with a lump at 0' : '') + '</div>';
   for (var i = 0; i < TOOLS.length; i++) {
     var key = TOOLS[i][0];
     if (!ex[key] && ex.notes[key]) {
@@ -14121,6 +14256,17 @@ function renderExport() {
   }
 
   var scripts = IA.reproScripts(r.fit, ST.x, ST.seed, ST.B, ST.src);
+  /* The scripts fit the values above 0, which are the data they hold or
+     read; they say so first, and leave the lump to the lines above. */
+  if (li) {
+    var lumpHdr = function (c) {
+      return c + ' This page set aside the ' + li.n0 + ' exact zero' + (li.n0 === 1 ? '' : 's') + ' (' +
+        IA.num(li.p0, 6) + ' of the ' + li.n + ' values)\n' +
+        c + ' and fitted the model to the ' + (li.n - li.n0) + ' values above 0, which are the data below.\n' +
+        c + ' A simulation draws 0 with probability ' + IA.num(li.p0, 6) + ' and otherwise from this model.\n';
+    };
+    scripts = { r: lumpHdr('#') + scripts.r, matlab: lumpHdr('%') + scripts.matlab, python: lumpHdr('#') + scripts.python };
+  }
   h += '<div class="plot-hd" style="margin-top:14px">Refit and re-test from the raw data</div>' +
        '<div class="plot-cap" style="text-align:left;margin-bottom:7px">These run the whole ' +
        'analysis again in another tool, including the parametric bootstrap. Running one is an ' +
@@ -14982,6 +15128,9 @@ function provenance(withBoot, dataOnly) {
     ['# data source: ' + (ST.src || 'pasted or typed by the user')],
     ['# observations: ' + (ST.s ? ST.s.n : 0)]
   ];
+  var li = lumpOn() ? lumpInfo() : null;
+  if (li) rows.push(['# exact zeros set aside: ' + li.n0 + ' of ' + li.n + ' values (' + IA.num(li.p0, 6) +
+                     '); the observations here are the ' + (li.n - li.n0) + ' above 0']);
   /* The data file holds the data alone, and so the fit settings, which
      change nothing in it, stay out of its header. */
   if (dataOnly) { rows.push([]); return rows; }
@@ -16775,7 +16924,7 @@ function renderPairCoef() {
    the column's source unless the reader has chosen another. */
 function captureMarginals() {
   var h = ST.handoff, r = pickedRow();
-  if (!h || h.from !== 'pair' || (h.kind !== 'x' && h.kind !== 'y') || !r || h.sig !== PST.sig) return;
+  if (!h || lumpOn() || h.from !== 'pair' || (h.kind !== 'x' && h.kind !== 'y') || !r || h.sig !== PST.sig) return;
   var prev = PST.marg[h.kind];
   if (prev && prev.fit === r.fit) return;
   PST.marg[h.kind] = { fit: r.fit, dist: r.dist };
@@ -16959,7 +17108,7 @@ function attrName(s) {
    holds exactly those numbers and the pairs here have not changed since. */
 function pairHandoff() {
   var h = ST.handoff, r = pickedRow();
-  if (!h || h.from !== 'pair' || !r || h.sig !== PST.sig) return null;
+  if (!h || lumpOn() || h.from !== 'pair' || !r || h.sig !== PST.sig) return null;
   if (h.kind !== 'resid' && h.kind !== 'perunit') return null;
   if (h.kind === 'perunit' && !PST.x.every(function (v) { return v > 0; })) return null;
   return { kind: h.kind, fit: r.fit, dist: r.dist };
@@ -17883,7 +18032,7 @@ function drawArCorrelogram(host, left, ar, what) {
    kept while the data (and, for the second, section 4's fit) stay the same. */
 function captureSeriesMarginal() {
   var h = ST.handoff, r = pickedRow();
-  if (!h || h.from !== 'time' || (h.kind !== 'y' && h.kind !== 'resid') || !r || h.sig !== seriesSigFor(h.kind)) return;
+  if (!h || lumpOn() || h.from !== 'time' || (h.kind !== 'y' && h.kind !== 'resid') || !r || h.sig !== seriesSigFor(h.kind)) return;
   var prev = SST.marg[h.kind];
   if (prev && prev.fit === r.fit) return;
   SST.marg[h.kind] = { fit: r.fit, dist: r.dist, sig: h.sig };
@@ -18257,7 +18406,7 @@ function seriesModelSig() {
 function seriesSigFor(kind) { return kind === 'y' ? SST.sig : seriesModelSig(); }
 function seriesHandoff(kind) {
   var h = ST.handoff, r = pickedRow();
-  if (!h || h.from !== 'time' || h.kind !== kind || !r || h.sig !== seriesSigFor(kind)) return null;
+  if (!h || lumpOn() || h.from !== 'time' || h.kind !== kind || !r || h.sig !== seriesSigFor(kind)) return null;
   return { fit: r.fit, dist: r.dist };
 }
 
@@ -18578,7 +18727,10 @@ document.addEventListener('DOMContentLoaded', function () {
     LOADER.useColumn(ST.col, 'Re-read as ' + (this.value === 'hm' ? 'HH:MM' : 'MM:SS'));
   });
   $('fam-pick').addEventListener('change', function () {
-    ST.family = this.value; ST.userPicked = false; refitAll(); renderStats();
+    ST.family = this.value; ST.userPicked = false; applyLump(); refitAll(); renderStats();
+  });
+  $('lump-chk').addEventListener('change', function () {
+    ST.lump = this.checked; ST.userPicked = false; ST.binAuto = true; applyLump(); refitAll(); renderStats();
   });
   $('shift-chk').addEventListener('change', function () {
     ST.shift = this.checked; ST.shiftAutoOff = false;
