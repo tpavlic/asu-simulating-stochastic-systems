@@ -1545,16 +1545,24 @@ export function batchPlot(fig, d) {
  * A legend in the symbol-first grid (.leg): each item a swatch drawn the
  * way the plot draws that mark, followed by its label.
  * @param {HTMLElement} container the element to fill; it gains the .leg class
- * @param {{ swatch: 'line'|'dash'|'dot'|'hollow'|'bar'|'interval'|'flagged'|'thin'|'diamond'|'shade'|'dotted', color: string, label: string }[]} items
+ * @param {{ swatch: 'line'|'dash'|'dot'|'hollow'|'bar'|'interval'|'flagged'|'thin'|'diamond'|'shade'|'dotted', color: string, label: string, svg?: string }[]} items
  *   `color` is a token name ('--est') or a CSS color; `label` is HTML. `shade` is
  *   the translucent band that marks an excluded stretch, with the muted line
- *   drawn inside it; `dotted` is a thin dotted line.
+ *   drawn inside it; `dotted` is a thin dotted line. An item with an `svg`
+ *   string (a 24 × 12 `<svg>`) is drawn with that symbol in place of a swatch.
+ * @param {Figure} [fig] the figure the legend explains; its SVG, PNG, and
+ *   COPY exports draw the legend under the plot (see legendStrip)
  * @returns {HTMLElement} the container
  */
-export function legend(container, items) {
+export function legend(container, items, fig) {
   container.classList.add('leg');
-  container.innerHTML = items.map(it => '<span>' + swatchSvg(it.swatch, col(it.color, '--est')) + '<span>' + it.label + '</span></span>').join('');
+  container.innerHTML = items.map(it => '<span>' + itemSwatch(it) + '<span>' + it.label + '</span></span>').join('');
+  if (fig) fig.legendItems = items.slice();
   return container;
+}
+
+function itemSwatch(it) {
+  return it.svg || swatchSvg(it.swatch, col(it.color, '--est'));
 }
 
 function swatchSvg(kind, c) {
@@ -1581,10 +1589,20 @@ function swatchSvg(kind, c) {
 
 const EXPORT_TOKENS = ['--accent', '--text', '--muted', '--border', '--card', '--chart-bg', '--truth', '--est', '--est-pale', '--miss', '--ok', '--band', '--pair', '--warn'];
 
-// An SVG drawn as an image, as the PNG and COPY buttons draw it, cannot reach
-// the fonts the page loaded, and so its text fell back to a wider system font
-// and a legend that fit on the page could run past the frame. The page's font
-// is therefore embedded in every exported figure: the Google Fonts stylesheet
+// The SVG button writes a file for other programs to open, and an editor such
+// as Inkscape reads no font embedded in an SVG: it sets the text in whatever
+// font it has, at widths the figure was not laid out for. The SVG file
+// therefore names fonts of one set of widths instead, Arial
+// and its metric twins Helvetica and Liberation Sans (and Courier New and
+// Liberation Mono for monospace), one of which nearly every system has.
+const SVG_FONTS = { sans: "Arial, Helvetica, 'Liberation Sans', sans-serif", mono: "'Courier New', Courier, 'Liberation Mono', monospace" };
+const PAGE_FONTS = { sans: FONT, mono: MONO };
+
+// The PNG and COPY buttons draw the figure in the browser, where an SVG drawn
+// as an image cannot reach the fonts the page loaded, and so its text fell
+// back to a wider system font and a legend that fit on the page could run
+// past the frame. The page's font is therefore embedded in the SVG those
+// buttons rasterize: the Google Fonts stylesheet
 // is fetched once (from the browser's cache of the page's own fonts), its
 // basic Latin Outfit face kept, and the file inlined as a data URL. Outfit is
 // a variable font, and the stylesheet names one file under every weight, and
@@ -1621,32 +1639,185 @@ function exportFontCss() {
   return exportFontPromise;
 }
 
+// The legend is HTML beside the figure on the page, and so an export draws it
+// again in SVG, as a strip under the plot laid out as the page lays out .leg:
+// items in centered rows, each a swatch and its label, a label too long for
+// the row wrapping onto further lines of its own. A trailing "(drag it…)"
+// tells the reader of the page what to do with a handle, and a printed
+// figure has no handle, and so the export drops it.
+const LEG_FS = 11.5, LEG_LH = 15, LEG_SW = 24, LEG_SH = 12, LEG_GAP = 6, LEG_COLGAP = 22, LEG_ROWGAP = 3, LEG_PAD = 8;
+const LEG_HINT = /\s*\((?:drag|click)\b[^)]*\)\s*$/;
+
+// The label as runs of text, each with the style its markup gives it.
+function legendRuns(html) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = html;
+  const runs = [];
+  const walk = (node, st) => {
+    for (const n of node.childNodes) {
+      if (n.nodeType === 3) { if (n.nodeValue) runs.push(Object.assign({ text: n.nodeValue.replace(/\s+/g, ' ') }, st)); continue; }
+      if (n.nodeType !== 1) continue;
+      const tag = n.tagName.toLowerCase();
+      walk(n, {
+        italic: st.italic || tag === 'i' || tag === 'em',
+        bold: st.bold || tag === 'b' || tag === 'strong',
+        shift: tag === 'sub' ? 'sub' : tag === 'sup' ? 'sup' : st.shift
+      });
+    }
+  };
+  walk(tpl.content, { italic: false, bold: false, shift: null });
+  const last = runs[runs.length - 1];
+  if (last) last.text = last.text.replace(LEG_HINT, '');
+  return runs.filter(r => r.text);
+}
+
+let legCtx = null;
+function runFont(r, family) {
+  return (r.italic ? 'italic ' : '') + (r.bold ? '600 ' : '') + (r.shift ? LEG_FS * 0.75 : LEG_FS) + 'px ' + family;
+}
+function runWidth(r, text, family) {
+  if (!legCtx) legCtx = document.createElement('canvas').getContext('2d');
+  legCtx.font = runFont(r, family);
+  return legCtx.measureText(text).width;
+}
+
+// Breaks a label's runs into lines no wider than maxW, at spaces.
+function wrapRuns(runs, maxW, family) {
+  const words = [];   // each word a list of styled pieces, with the space before it
+  let cur = null;
+  for (const r of runs) {
+    r.text.split(/( )/).forEach(part => {
+      if (part === ' ') { cur = null; return; }
+      if (!part) return;
+      if (!cur) { cur = { pieces: [], space: words.length > 0 }; words.push(cur); }
+      cur.pieces.push(Object.assign({}, r, { text: part }));
+    });
+  }
+  const lines = [];
+  let line = null;
+  for (const wd of words) {
+    const w = wd.pieces.reduce((s, p) => s + runWidth(p, p.text, family), 0);
+    const sp = runWidth({}, ' ', family);
+    if (line && line.w + sp + w <= maxW) { line.words.push(wd); line.w += sp + w; }
+    else { line = { words: [Object.assign({}, wd, { space: false })], w }; lines.push(line); }
+  }
+  return lines;
+}
+
 /**
- * Serializes a figure as a standalone SVG document: the readout and the
- * drag handle's hit stroke are left out, a white background is added, and
- * an inline <style> carries the font families, the font itself when it is
- * given, and the page's tokens resolved to literal colors.
+ * The figure's legend drawn in SVG for an export, laid out for a figure
+ * `width` wide in the font `family`, or null where the figure has no legend.
  * @param {Figure} fig
- * @param {string} [fontCss] `@font-face` rules to embed (see exportFontCss)
+ * @param {number} width
+ * @param {string} family
+ * @returns {{ g: SVGGElement, h: number }|null}
+ */
+function legendStrip(fig, width, family) {
+  const items = (fig.legendItems || []).map(it => ({ it, runs: legendRuns(it.label) })).filter(x => x.runs.length);
+  if (!items.length) return null;
+  const avail = width - 2 * LEG_PAD;
+  const maxText = Math.max(40, avail - LEG_SW - LEG_GAP);
+  for (const x of items) {
+    x.lines = wrapRuns(x.runs, maxText, family);
+    x.w = LEG_SW + LEG_GAP + Math.max(...x.lines.map(l => l.w));
+    x.h = x.lines.length * LEG_LH;
+  }
+  const rows = [];
+  let row = null;
+  for (const x of items) {
+    if (row && row.w + LEG_COLGAP + x.w <= avail) { row.items.push(x); row.w += LEG_COLGAP + x.w; row.h = Math.max(row.h, x.h); }
+    else { row = { items: [x], w: x.w, h: x.h }; rows.push(row); }
+  }
+  // Rows of one item each are a column, and so they share one left edge,
+  // the column centered as a whole, rather than each centered on its own.
+  const column = rows.length > 1 && rows.every(r => r.items.length === 1);
+  const colX = Math.max(LEG_PAD, (width - Math.max(...rows.map(r => r.w))) / 2);
+  const g = document.createElementNS(SVGNS, 'g');
+  const tpl = document.createElement('template');
+  const fill = tok('--muted');
+  let y = 0;
+  for (const r of rows) {
+    let x0 = column ? colX : Math.max(LEG_PAD, (width - r.w) / 2);
+    for (const x of r.items) {
+      // A label of one line centers its swatch on the line, as the page's
+      // flex row does; a label of several centers it on the whole block.
+      tpl.innerHTML = itemSwatch(x.it);
+      const sw = tpl.content.querySelector('svg');
+      if (sw) {
+        sw.removeAttribute('class');
+        sw.setAttribute('x', r1(x0)); sw.setAttribute('y', r1(y + (x.h - LEG_SH) / 2));
+        sw.setAttribute('width', LEG_SW); sw.setAttribute('height', LEG_SH);
+        g.appendChild(sw);
+      }
+      x.lines.forEach((ln, i) => {
+        const t = svgEl('text', { x: r1(x0 + LEG_SW + LEG_GAP), y: r1(y + i * LEG_LH + LEG_LH / 2 + LEG_FS * 0.35), 'font-size': LEG_FS, fill }, g);
+        // Without this, renderers outside the browser drop a space that
+        // opens a <tspan>.
+        t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
+        // Neighboring pieces of one style share a <tspan>.
+        const spans = [];
+        ln.words.forEach(wd => wd.pieces.forEach((p, k) => {
+          const text = (k === 0 && wd.space ? ' ' : '') + p.text;
+          const prev = spans[spans.length - 1];
+          if (prev && prev.italic === p.italic && prev.bold === p.bold && prev.shift === p.shift) prev.text += text;
+          else spans.push(Object.assign({}, p, { text }));
+        }));
+        let dy = 0;
+        for (const p of spans) {
+          const want = p.shift === 'sub' ? 3 : p.shift === 'sup' ? -4 : 0;
+          const ts = svgEl('tspan', null, t);
+          ts.textContent = p.text;
+          if (want !== dy) { ts.setAttribute('dy', want - dy); dy = want; }
+          if (p.shift) ts.setAttribute('font-size', LEG_FS * 0.75);
+          if (p.italic) ts.setAttribute('font-style', 'italic');
+          if (p.bold) ts.setAttribute('font-weight', 600);
+        }
+      });
+      x0 += x.w + LEG_COLGAP;
+    }
+    y += r.h + LEG_ROWGAP;
+  }
+  return { g, h: y - LEG_ROWGAP };
+}
+
+/**
+ * Serializes a figure as a standalone SVG document, as the SVG button saves
+ * it: the readout and the drag handle's hit stroke are left out, the legend
+ * is drawn under the plot (see legendStrip), a white background is added,
+ * and an inline <style> carries the portable font families (see SVG_FONTS)
+ * and the page's tokens resolved to literal colors.
+ * @param {Figure} fig
  * @returns {string}
  */
-export function figureToSvgString(fig, fontCss = '') {
+export function figureToSvgString(fig) {
+  return exportSvg(fig, '', SVG_FONTS).str;
+}
+// `fontCss` is `@font-face` rules to embed (see exportFontCss), and `fonts`
+// the sans and mono families the text is set in.
+function exportSvg(fig, fontCss, fonts) {
   const clone = fig.svg.cloneNode(true);
   clone.querySelectorAll('[data-noexport]').forEach(n => n.remove());
+  const leg = legendStrip(fig, fig.w, fonts.sans);
+  const w = fig.w, h = leg ? fig.h + 4 + leg.h + 12 : fig.h;
+  if (leg) {
+    leg.g.setAttribute('transform', 'translate(0,' + (fig.h + 4) + ')');
+    clone.appendChild(leg.g);
+  }
   clone.setAttribute('xmlns', SVGNS);
-  clone.setAttribute('width', fig.w);
-  clone.setAttribute('height', fig.h);
+  clone.setAttribute('width', w);
+  clone.setAttribute('height', h);
+  clone.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
   clone.removeAttribute('style');
   clone.removeAttribute('class');
   const css = getComputedStyle(document.documentElement);
   const vars = EXPORT_TOKENS.map(n => n + ':' + css.getPropertyValue(n).trim()).join(';');
   const style = document.createElementNS(SVGNS, 'style');
-  style.textContent = fontCss + 'svg{' + vars + '} text{font-family:' + FONT + '} .tick,.tabular{font-variant-numeric:tabular-nums} .mono{font-family:' + MONO + '}';
+  style.textContent = fontCss + 'svg{' + vars + '} text{font-family:' + fonts.sans + '} .tick,.tabular{font-variant-numeric:tabular-nums} .mono{font-family:' + fonts.mono + '}';
   const bg = document.createElementNS(SVGNS, 'rect');
   bg.setAttribute('width', '100%'); bg.setAttribute('height', '100%'); bg.setAttribute('fill', css.getPropertyValue('--card').trim() || '#fff');
   clone.insertBefore(bg, clone.firstChild);
   clone.insertBefore(style, clone.firstChild);
-  return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+  return { str: '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone), w, h };
 }
 
 /**
@@ -1658,18 +1829,18 @@ export function figureToSvgString(fig, fontCss = '') {
  */
 export function figureToPngBlob(fig, scale) {
   const s = scale || window.devicePixelRatio || 1;
-  return exportFontCss().then(css => svgPng(figureToSvgString(fig, css), fig, s));
+  return exportFontCss().then(css => svgPng(exportSvg(fig, css, PAGE_FONTS), s));
 }
-function svgPng(str, fig, s) {
+function svgPng({ str, w, h }, s) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(new Blob([str], { type: 'image/svg+xml;charset=utf-8' }));
     img.onload = () => {
       const cv = document.createElement('canvas');
-      cv.width = Math.round(fig.w * s); cv.height = Math.round(fig.h * s);
+      cv.width = Math.round(w * s); cv.height = Math.round(h * s);
       const ctx = cv.getContext('2d');
       ctx.setTransform(s, 0, 0, s, 0, 0);
-      ctx.drawImage(img, 0, 0, fig.w, fig.h);
+      ctx.drawImage(img, 0, 0, w, h);
       URL.revokeObjectURL(url);
       cv.toBlob(b => b ? resolve(b) : reject(new Error('PNG encoding failed')), 'image/png');
     };
@@ -1743,8 +1914,8 @@ export function exportButtons(container, fig, baseName) {
     b.addEventListener('click', fn);
     row.appendChild(b);
   };
-  mk('SVG', 'Download this figure as SVG', () => exportFontCss().then(css =>
-    download(name + '.svg', new Blob([figureToSvgString(fig, css)], { type: 'image/svg+xml;charset=utf-8' }))));
+  mk('SVG', 'Download this figure as SVG', () =>
+    download(name + '.svg', new Blob([figureToSvgString(fig)], { type: 'image/svg+xml;charset=utf-8' })));
   mk('PNG', 'Download this figure as PNG', () => figureToPngBlob(fig).then(b => download(name + '.png', b)).catch(err => console.error(err)));
   if (canCopyImage()) {
     // The status shows under the buttons, over the figure (see .fig-status).

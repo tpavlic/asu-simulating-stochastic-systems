@@ -281,12 +281,7 @@ function figure(parent, opts, name, draw, legendItems, captionHtml) {
   exportButtons(box, fig, name);
   const leg = document.createElement('div');
   parent.appendChild(leg);
-  legend(leg, legendItems.filter(it => !it.svg));
-  for (const it of legendItems.filter(x => x.svg)) {
-    const sp = document.createElement('span');
-    sp.innerHTML = it.svg + '<span>' + it.label + '</span>';
-    leg.appendChild(sp);
-  }
+  legend(leg, legendItems, fig);
   if (captionHtml) parent.appendChild(para('cmp-cap', captionHtml));
   return fig;
 }

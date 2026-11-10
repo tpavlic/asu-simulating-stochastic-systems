@@ -123,7 +123,7 @@ function draw(root) {
   let fig = makeFigure(b.box, { height: 260, narrowHeight: 300, xLabel: 'Waiting time (minutes)', yLabel: 'Frequency' });
   fig.render(f => histogram(f, h));
   exportButtons(b.box, fig, 'histogram');
-  legend(b.leg, [{ swatch: 'bar', color: '--est', label: 'observations' }]);
+  legend(b.leg, [{ swatch: 'bar', color: '--est', label: 'observations' }], fig);
 
   b = block(root, 'Empirical cdf');
   const sw = waits.slice().sort((x, y) => x - y);
@@ -131,33 +131,33 @@ function draw(root) {
   fig = makeFigure(b.box, { height: 260, narrowHeight: 300, xLabel: 'Waiting time (minutes)' });
   fig.render(f => ecdf(f, e));
   exportButtons(b.box, fig, 'ecdf');
-  legend(b.leg, [{ swatch: 'line', color: '--est', label: 'empirical cdf' }]);
+  legend(b.leg, [{ swatch: 'line', color: '--est', label: 'empirical cdf' }], fig);
 
   b = block(root, 'Box plots');
   const groups = [0, 0.6, 1.5].map(s => Array.from({ length: 30 }, () => 5 + s + normal(u) * (1 + s / 2)));
   fig = makeFigure(b.box, { height: 'auto', margin: { b: 40, t: 8 }, xLabel: 'Average wait (minutes)' });
   fig.render(f => boxPlot(f, groups.map((g, i) => ({ label: 'Design ' + 'ABC'[i], stats: boxStats(g) }))));
   exportButtons(b.box, fig, 'boxplots');
-  legend(b.leg, [{ swatch: 'bar', color: '--est', label: 'quartile box, median line, 1.5 IQR whiskers' }, { swatch: 'hollow', color: '--est', label: 'outlier' }, { swatch: 'diamond', color: '--truth', label: 'mean' }]);
+  legend(b.leg, [{ swatch: 'bar', color: '--est', label: 'quartile box, median line, 1.5 IQR whiskers' }, { swatch: 'hollow', color: '--est', label: 'outlier' }, { swatch: 'diamond', color: '--truth', label: 'mean' }], fig);
 
   b = block(root, 'Observation sequence (20,000 points, thinned per pixel column)');
   fig = makeFigure(b.box, { height: 240, narrowHeight: 280, yLabel: 'Queue length' });
   fig.render(f => sequence(f, ar));
   exportButtons(b.box, fig, 'sequence');
-  legend(b.leg, [{ swatch: 'thin', color: '--est', label: 'observation' }]);
+  legend(b.leg, [{ swatch: 'thin', color: '--est', label: 'observation' }], fig);
 
   b = block(root, 'Running mean');
   fig = makeFigure(b.box, { height: 240, narrowHeight: 280 });
   fig.render(f => runningMean(f, ar.subarray(0, 3000)));
   exportButtons(b.box, fig, 'running-mean');
-  legend(b.leg, [{ swatch: 'line', color: '--est', label: 'running mean' }, { swatch: 'dash', color: '--truth', label: 'final value' }]);
+  legend(b.leg, [{ swatch: 'line', color: '--est', label: 'running mean' }, { swatch: 'dash', color: '--truth', label: 'final value' }], fig);
 
   b = block(root, 'Replication means (dot plot)');
   const repMeans = Array.from({ length: 20 }, () => 4.8 + normal(u) * 0.6);
   fig = makeFigure(b.box, { height: 130, narrowHeight: 150, margin: { t: 8, b: 40 }, xLabel: 'Replication mean of average wait' });
   fig.render(f => dotPlot(f, repMeans, { labels: repMeans.map((_, i) => 'replication ' + (i + 1)), mean: true }));
   exportButtons(b.box, fig, 'dotplot');
-  legend(b.leg, [{ swatch: 'dot', color: '--est', label: 'one replication' }, { swatch: 'line', color: '--truth', label: 'mean of the replication means' }]);
+  legend(b.leg, [{ swatch: 'dot', color: '--est', label: 'one replication' }, { swatch: 'line', color: '--truth', label: 'mean of the replication means' }], fig);
 
   b = block(root, 'Intervals (forest plot)');
   const items = [
@@ -170,7 +170,7 @@ function draw(root) {
   fig = makeFigure(b.box, { height: 'auto', margin: { t: 8, b: 40 }, xLabel: 'Difference in mean wait (minutes)' });
   fig.render(f => intervals(f, items, { ref: 0 }));
   exportButtons(b.box, fig, 'intervals');
-  legend(b.leg, [{ swatch: 'interval', color: '--est', label: 'interval includes zero' }, { swatch: 'flagged', color: '--miss', label: 'interval excludes zero' }, { swatch: 'dash', color: '--truth', label: 'zero difference' }]);
+  legend(b.leg, [{ swatch: 'interval', color: '--est', label: 'interval includes zero' }, { swatch: 'flagged', color: '--miss', label: 'interval excludes zero' }, { swatch: 'dash', color: '--truth', label: 'zero difference' }], fig);
 
   b = block(root, 'Scatter');
   const sx = Array.from({ length: 60 }, () => 5 + normal(u));
@@ -178,21 +178,21 @@ function draw(root) {
   fig = makeFigure(b.box, { height: 300, narrowHeight: 330, xLabel: 'Design A replication mean', yLabel: 'Design B replication mean' });
   fig.render(f => scatter(f, sx, sy));
   exportButtons(b.box, fig, 'scatter');
-  legend(b.leg, [{ swatch: 'dot', color: '--est', label: 'one replication pair' }]);
+  legend(b.leg, [{ swatch: 'dot', color: '--est', label: 'one replication pair' }], fig);
 
   b = block(root, 'Lag plot (lag 1)');
   const a = ar.subarray(0, 600);
   fig = makeFigure(b.box, { height: 300, narrowHeight: 330, xLabel: 'Observation i', yLabel: 'Observation i + 1' });
   fig.render(f => lagPlot(f, a.subarray(0, a.length - 1), a.subarray(1)));
   exportButtons(b.box, fig, 'lag-plot');
-  legend(b.leg, [{ swatch: 'dot', color: '--est', label: 'consecutive pair' }, { swatch: 'dash', color: '--truth', label: 'identity line' }]);
+  legend(b.leg, [{ swatch: 'dot', color: '--est', label: 'consecutive pair' }, { swatch: 'dash', color: '--truth', label: 'identity line' }], fig);
 
   b = block(root, 'Correlogram');
   const r = acf(Array.from(ar.subarray(0, 2000)), 30);
   fig = makeFigure(b.box, { height: 240, narrowHeight: 280 });
   fig.render(f => correlogram(f, r, { band: 2 / Math.sqrt(2000) }));
   exportButtons(b.box, fig, 'correlogram');
-  legend(b.leg, [{ swatch: 'line', color: '--est', label: 'autocorrelation at each lag' }, { swatch: 'dash', color: '--truth', label: '±2/√n band' }]);
+  legend(b.leg, [{ swatch: 'line', color: '--est', label: 'autocorrelation at each lag' }, { swatch: 'dash', color: '--truth', label: '±2/√n band' }], fig);
 
   b = block(root, 'Warm-up plot with a draggable truncation line');
   const L = 400, R = 10;
@@ -222,7 +222,7 @@ function draw(root) {
   }));
   exportButtons(b.box, fig, 'warm-up');
   b.sec.insertBefore(echo, b.leg);
-  legend(b.leg, [{ swatch: 'thin', color: '--pair', label: 'average across replications' }, { swatch: 'line', color: '--est', label: 'moving average, w = 10' }, { swatch: 'dash', color: '--truth', label: 'cumulative average' }, { swatch: 'dash', color: '--text', label: 'truncation point (drag, or use the arrow keys)' }]);
+  legend(b.leg, [{ swatch: 'thin', color: '--pair', label: 'average across replications' }, { swatch: 'line', color: '--est', label: 'moving average, w = 10' }, { swatch: 'dash', color: '--truth', label: 'cumulative average' }, { swatch: 'dash', color: '--text', label: 'truncation point (drag, or use the arrow keys)' }], fig);
 
   b = block(root, 'Batch means');
   const series = ar.subarray(0, 1000);
@@ -232,7 +232,7 @@ function draw(root) {
   fig = makeFigure(b.box, { height: 260, narrowHeight: 300, yLabel: 'Queue length' });
   fig.render(f => batchPlot(f, { ys: series, boundaries: bounds, means }));
   exportButtons(b.box, fig, 'batch-means');
-  legend(b.leg, [{ swatch: 'thin', color: '--est', label: 'observation' }, { swatch: 'line', color: '--ok', label: 'batch mean (' + nb + ' batches of ' + size + ')' }, { swatch: 'dash', color: '--muted', label: 'batch boundary' }]);
+  legend(b.leg, [{ swatch: 'thin', color: '--est', label: 'observation' }, { swatch: 'line', color: '--ok', label: 'batch mean (' + nb + ' batches of ' + size + ')' }, { swatch: 'dash', color: '--muted', label: 'batch boundary' }], fig);
 }
 
 /** Called each time the gallery is shown; the first time, it draws. */

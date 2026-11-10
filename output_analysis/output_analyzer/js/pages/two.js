@@ -781,14 +781,14 @@ function renderIndependent(res, notes, d, level, blank) {
   legend(leg1, [
     { swatch: 'dot', color: '--est', label: 'one replication’s outcome' },
     { swatch: 'interval', color: '--truth', label: np ? 'design pseudo-median with its own ' + ownName : 'design mean with its own ' + ownName }
-  ]);
+  ], fig1);
   const diffName = np ? L + ' Wilcoxon interval for the shift A − B' : L + ' ' + (pooled ? 'pooled t' : 'Welch') + ' interval for A − B';
   legend(leg2, [
     excludes
       ? { swatch: 'flagged', color: '--miss', label: diffName + ', which excludes 0' }
       : { swatch: 'interval', color: '--est', label: diffName },
     { swatch: 'dash', color: '--truth', label: 'zero difference' }
-  ]);
+  ], fig2);
   f.appendChild(caption(np
     ? 'The top plot shows every replication outcome of each design, with each design’s pseudo-median (the Hodges–Lehmann estimate) and its own ' + L +
       ' Wilcoxon signed-rank interval under its dots. The bottom plot is the Hodges–Lehmann shift between the designs with its ' + L + ' rank-sum interval, drawn against zero; an interval that excludes zero is drawn red and dashed.'
@@ -1065,11 +1065,13 @@ function pairViews(parent, P) {
     legStack.appendChild(lg);
     legs[v] = lg;
   }
-  legend(legs.rep, [
+  const legItems = {};
+  legItems.rep = [
     { swatch: 'dot', color: '--est', label: 'A (filled)' },
     { swatch: 'hollow', color: '--est', label: 'B (hollow)' },
     { swatch: 'dash', color: '--pair', label: 'difference within the pair' }
-  ]);
+  ];
+  legend(legs.rep, legItems.rep);
   // The number of pairs whose difference has the sign of the mean difference.
   let k = 0;
   if (P) {
@@ -1078,11 +1080,12 @@ function pairViews(parent, P) {
   }
   // A line style no pair takes is left out of the legend. The by-replication
   // legend's three rows keep the shared cell's height either way.
-  legend(legs.slope, [
+  legItems.slope = [
     !P || k > 0 ? { swatch: 'line', color: '--est', label: 'a pair (A to B)' } : null,
     !P || k < P.a.length ? { swatch: 'dash', color: '--est', label: 'pair against the overall direction' } : null,
     { swatch: 'line', color: '--truth', label: 'mean of each design' }
-  ].filter(Boolean));
+  ].filter(Boolean);
+  legend(legs.slope, legItems.slope);
   let capRep = 'Each replication shows both designs’ outcomes and the difference between them.';
   let capSlope = 'Each line is one replication; when most lines slope the same way, the pairs agree on the direction of the difference, and the paired test is picking up that agreement.';
   if (P) {
@@ -1107,6 +1110,8 @@ function pairViews(parent, P) {
     }
     if (!P) fig.render(fg => emptyFrame(fg, ''));
     else fig.render(fg => (view === 'slope' ? pairsAsSlopes : pairsByRep)(fg, P));
+    // The shown view's legend goes out with the figure's exports.
+    legend(legs[view], legItems[view], fig);
     if (tools) tools.remove();
     tools = exportButtons(box, fig, view === 'slope' ? 'two-systems-pairs-as-slopes' : 'two-systems-pairs-by-replication');
   };
@@ -1197,7 +1202,7 @@ function renderPaired(res, notes, d, level, blank) {
     { swatch: 'dot', color: '--est', label: 'one matched pair’s difference' },
     { swatch: 'interval', color: '--truth', label: (np ? 'pseudo-median of the differences with its ' : 'mean difference with its ') + (shown ? shown.name : L + (np ? ' Wilcoxon signed-rank interval' : ' paired t interval')) },
     { swatch: 'dash', color: '--muted', label: 'zero difference' }
-  ]);
+  ], fig1);
 
   if (!pr) {
     resultBase = null;

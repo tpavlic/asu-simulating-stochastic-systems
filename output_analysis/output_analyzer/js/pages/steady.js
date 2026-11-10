@@ -797,7 +797,7 @@ function warmLegend(ds) {
   );
   if (ds && cut > 0) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by the cut' });
   if (ds && warm && warm.unequalEnds) items.push({ swatch: 'dotted', color: '--muted', label: 'end of the shortest run; later bins average fewer runs' });
-  legend(el.wleg, items);
+  legend(el.wleg, items, warmFig);
   warmLegendCut = ds && cut > 0;
 }
 let warmLegendCut = null;
@@ -969,7 +969,7 @@ function batchLegend(byTime, res, ds, S) {
   ];
   if (S && S.excludeTo != null) items.push({ swatch: 'shade', color: '--muted', label: 'excluded by truncation' });
   if (S && S.joins.length) items.push({ swatch: 'dotted', color: '--accent', label: 'join between replications' });
-  legend(el.bleg, items);
+  legend(el.bleg, items, batchFig);
 }
 
 /**
@@ -1031,7 +1031,7 @@ function drawLag(res) {
   const items = [{ swatch: 'dot', color: '--est', label: 'one pair of neighboring batch means' }, { swatch: 'dash', color: '--truth', label: 'identity line' }];
   if (!res || res.b < 3) {
     lagFig.render(f => emptyPlot(f, res ? 'Too few batches for a lag-one scatter' : 'No batches yet'));
-    legend(el.lleg, items);
+    legend(el.lleg, items, lagFig);
     el.lcap.innerHTML = '<p class="ss-cap">Each point pairs a batch mean with the next one; the correlation of those pairs is the lag-one <span class="sym">r<sub>1</sub></span> in the cards above.</p>';
     return;
   }
@@ -1046,7 +1046,7 @@ function drawLag(res) {
     });
     lagPlot(f, xs, ys, { label: 'one pair of neighboring batch means' });
   });
-  legend(el.lleg, items);
+  legend(el.lleg, items, lagFig);
   const rejects = res.lag1Test.p < 1 - res.level;
   const hasC = Number.isFinite(res.lag1Test.C);
   const alpha = pct(1 - res.level, 0);
@@ -1072,7 +1072,7 @@ function drawAcf(ds, res) {
   acfFig.opts.xLabel = byTime ? 'Lag (time units)' : 'Lag (observations)';
   if (!A) {
     acfFig.render(f => emptyPlot(f, ds ? 'Too few observations after truncation for a correlogram' : 'No dataset yet'));
-    legend(el.aleg, []);
+    legend(el.aleg, [], acfFig);
     el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size.';
     return;
   }
@@ -1108,7 +1108,7 @@ function drawAcf(ds, res) {
     { swatch: 'dash', color: '--truth', label: '±2/√n band, n = ' + intl(A.n) }
   ];
   if (marker != null) items.push({ swatch: 'dash', color: '--ok', label: 'current ' + (byTime ? 'batch length' : 'batch size') + (drag ? ' (drag it to change the batches)' : '') });
-  legend(el.aleg, items);
+  legend(el.aleg, items, acfFig);
   el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size. ' +
     (drag
       ? 'Drag it to set the batch size' + (mode === 'count' ? ', which here sets the number of batches that gives that size' : '') + '.'

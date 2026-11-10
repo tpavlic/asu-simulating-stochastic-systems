@@ -283,7 +283,14 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   on-screen size, put on the clipboard, and left out where the browser cannot write an image
   there), and M, R, and PY, the last three being scripts (MATLAB, base-graphics R, matplotlib Python) that redraw the figure from the data
   embedded in them; the images and the R and Python scripts share one hyphenated file name, and the
-  MATLAB script takes the underscored identifier its language requires. Commit tag `oa`. Conventions
+  MATLAB script takes the underscored identifier its language requires. The legend is HTML beside
+  the figure on the page, and so the SVG, PNG, and COPY images draw it again as a strip under the
+  plot (`legendStrip` in `js/ui/plots.js`), which needs the figure passed to
+  `legend(container, items, fig)`; a legend drawn without it is left out of the images, and a
+  trailing "(drag …)" or "(click …)" hint is dropped from its label there. The SVG file names
+  Arial and its metric twins (`SVG_FONTS`) and embeds no font, because an editor such as Inkscape
+  ignores an embedded one, while the PNG and COPY images, drawn by the browser, embed the page's
+  Outfit. Commit tag `oa`. Conventions
   relied on by code outside the page, which any later edit has to preserve:*
   1. *The `js/` files are the source, and the page embeds a copy of every one of them between its
      `OA-MODULES-BEGIN` / `OA-MODULES-END` markers as `<script type="text/plain" data-module>`

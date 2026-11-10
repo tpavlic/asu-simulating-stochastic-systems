@@ -1082,7 +1082,7 @@ function drawFigure(d) {
       { swatch: 'dot', color: cEst, label: 'one replication outcome' },
       { swatch: 'line', color: cTruth, label: 'mean of the replication outcomes' },
       { swatch: 'interval', color: cTruth, label: lvl(level) + ' interval on the mean' }
-    ]);
+    ], fig);
     els.cap.textContent = 'Choose a dataset to see its replication outcomes.';
     return;
   }
@@ -1154,7 +1154,7 @@ function drawFigure(d) {
   if (hasInt) items.push(flagged ? { swatch: 'flagged', color: '--miss', label: lvl(level) + intName + ': excludes μ₀, and so rejects it' }
     : { swatch: 'interval', color: cTruth, label: lvl(level) + intName + (d.mu0 ? ': contains μ₀' : '') });
   if (d.mu0) items.push({ swatch: 'dash', color: '--text', label: 'stated mean μ₀ (drag it)' });
-  legend(els.leg, items);
+  legend(els.leg, items, fig);
   if (pooled) {
     els.cap.textContent = 'Each dot is one observation from the pooled replications, stacked upward where they crowd, and the bar under them is the interval that treats them as independent; its narrowness reflects the false assumption, not real precision.';
   } else if (hasInt && np) {

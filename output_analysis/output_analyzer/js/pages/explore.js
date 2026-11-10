@@ -209,7 +209,7 @@ function figure(api, parent, name, opts, draw, legendItems) {
   const f = api.fig(box, opts);
   f.render(draw);
   exportButtons(box, f, name);
-  if (legendItems) legend(box.appendChild(el('div')), legendItems);
+  if (legendItems) legend(box.appendChild(el('div')), legendItems, f);
   return f;
 }
 
