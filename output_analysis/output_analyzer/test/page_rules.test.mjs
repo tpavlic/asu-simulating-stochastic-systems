@@ -9,7 +9,7 @@
 // flat.test.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames, pairingDefault, histChoice, severalSectionsOff, rankProcWithheld } from '../js/ui/rules.js';
+import { initialTicks, fRatioVerdict, roleLabels, outcomeAxis, estimateAxis, shortNames, pairingDefault, histChoice, severalSectionsOff, rankProcWithheld, batchGuidance } from '../js/ui/rules.js';
 import { fRatio } from '../js/stats/intervals.js';
 
 test('initialTicks: every offered dataset before any choice', () => {
@@ -158,4 +158,43 @@ test('severalSectionsOff and rankProcWithheld keep the screen and the rank proce
   }
   assert.match(rankProcWithheld('subset'), /no nonparametric version/);
   for (const sec of ['means', 'diffs', 'anova', null]) assert.equal(rankProcWithheld(sec), null, String(sec));
+});
+
+test('batchGuidance: the bundled long run\'s default batches are too short, with the run that fixes them', () => {
+  // 5,000 observations in 20 batches of 250 against a crossing lag of 146.
+  const g = batchGuidance({ size: 250, b: 20, span: 5000, crossing: 146, maxLag: 400, integer: true });
+  assert.equal(g.tier, 'short');
+  assert.ok(Math.abs(g.ratio - 250 / 146) < 1e-12);
+  assert.deepEqual(g.target, { size: 1500, b: 20, run: 30000 });   // 10 × 146 = 1,460, up to two figures
+  assert.equal(g.fits, 3);
+  assert.equal(g.many, false);
+});
+
+test('batchGuidance: the tiers at 3× and 10× the crossing lag', () => {
+  const at = size => batchGuidance({ size, b: 20, span: 1e6, crossing: 100, maxLag: 400, integer: true }).tier;
+  assert.equal(at(299), 'short');
+  assert.equal(at(300), 'check');
+  assert.equal(at(999), 'check');
+  assert.equal(at(1000), 'ok');
+});
+
+test('batchGuidance: no crossing shown makes the ratio a bound', () => {
+  const short = batchGuidance({ size: 1000, b: 20, span: 20000, crossing: null, maxLag: 400, integer: true });
+  assert.equal(short.tier, 'short');
+  assert.equal(short.beyond, true);
+  assert.equal(short.lag, 400);
+  assert.deepEqual(short.target, { size: 4000, b: 20, run: 80000 });
+  const unknown = batchGuidance({ size: 1500, b: 20, span: 30000, crossing: null, maxLag: 400, integer: true });
+  assert.equal(unknown.tier, 'unknown');
+});
+
+test('batchGuidance: the suggested count stays between 10 and 30, and time lengths are not rounded to whole numbers', () => {
+  assert.equal(batchGuidance({ size: 10, b: 5, span: 50, crossing: 4, maxLag: 12, integer: true }).target.b, 10);
+  const many = batchGuidance({ size: 10, b: 40, span: 400, crossing: 4, maxLag: 100, integer: true });
+  assert.equal(many.target.b, 30);
+  assert.equal(many.many, true);
+  const t = batchGuidance({ size: 0.5, b: 20, span: 10, crossing: 0.123, maxLag: 2.5, integer: false });
+  assert.equal(t.target.size, 1.3);   // 10 × 0.123 = 1.23, up to two figures
+  assert.equal(t.fits, 7);
+  assert.equal(batchGuidance({ size: 0, b: 20, span: 10, crossing: 1, maxLag: 2, integer: true }), null);
 });

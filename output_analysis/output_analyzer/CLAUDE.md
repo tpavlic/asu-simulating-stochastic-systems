@@ -195,9 +195,24 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   (`truncationView` in `js/data/model.js`), so that the fence can be moved back or forward and saved
   again, always cutting the original run, and Summary and Plots' Within a run section draws that
   deleted stretch gray behind the fence; a correlogram of the truncated series with
-  the batch size marked, to choose a batch length that spans several correlation lengths; and batch
-  means on one replication or on all replications concatenated, by observation count or by
-  time-weighted time intervals with Fishman's lag-one test),
+  the batch size marked, to choose a batch length that spans several correlation lengths, and its
+  crossing lag drawn dotted: the first lag from which it stays inside the ±2/√n band for 5 lags in a
+  row (`bandCrossing` and `CROSSING_RUN` in `js/stats/steadystate.js`; a run of 5 keeps an
+  oscillating correlogram, r₁ < 0 < r₃, from crossing at lag 2, and is short because a correlated
+  series' sample correlogram wanders back outside a band drawn for an uncorrelated one, which a
+  requirement to stay inside for good, or for 10 lags, reads as a far later crossing); and batch means on one replication or on all replications concatenated, by observation
+  count or by time-weighted time intervals with Fishman's lag-one test, and a card giving the batch
+  size as a multiple of the crossing lag (`batchGuidance` in `js/ui/rules.js`: red under 3×, a note
+  to check r₁ under 10×, green from 10×, the cautious end of "several times", which a coverage
+  study of the bundled queue supported: 1,000 runs at ρ = 0.8 covered 87% at 1.5×, 92% at 4.4×,
+  93% at 8.8×, and 95% only near 35×); below 3× a warning gives the run that would allow 10 to 30
+  batches of 10× the crossing lag, or the batch size that would do when this run already holds ten
+  such batches, and says to check again on the longer run, because the narrower band there usually
+  moves the crossing later; more than 30 batches get a note that they add little; and under the
+  neighboring batch means, a verdict of no autocorrelation gains a line saying the test has little
+  power when the batches are too short, and a line when r₁ is more than 1/√b below zero saying that
+  this errs on the safe side (the interval comes out wider than it needs to be), which calls it
+  sampling noise only while the lower tail of Fishman's test is short of significance),
   ⑦ Report (the loaded datasets and every page's latest result on one page, each under the
   choices that produced it, with Print, Copy as text, and one combined CSV of every table), and
   ⑧ Storage (what localStorage holds between visits, and "Forget this session"), and ⑨ References
@@ -334,7 +349,9 @@ mobile, commit messages) are in the root `CLAUDE.md`.
      by-hand `ptukey`/`qtukey` computation on each pair's Welch degrees of freedom. Holm's step-down
      is pinned in `holm.R` against `p.adjust(n = length(p))`, `t.test(x, mu)`, `wilcox.test(x, mu)`,
      `pairwise.t.test` (pooled and not), and a by-hand blocked computation on `aov`'s residual mean
-     square, on data drawn so that Holm declares strictly more than Bonferroni in every family. On one to three
+     square, on data drawn so that Holm declares strictly more than Bonferroni in every family. The
+     crossing lag is pinned in `crossing.R` against R's own `acf`, on the bundled long run among
+     others. On one to three
      degrees of freedom, the Tukey and Dunnett quantiles and Rinott's constant are pinned against
      a nested `integrate`/`uniroot` solution in `lowdf.R`, not R's own `qtukey`, which is about 1%
      off at 2, and against exact identities in `special.test.mjs` (Tukey's q with two designs is

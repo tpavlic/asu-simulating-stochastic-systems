@@ -1110,13 +1110,15 @@ export function qqPlot(fig, q, o = {}) {
  * series resampled onto equal time intervals); the axis then takes ordinary
  * rather than integer ticks. `marker` draws a dashed vertical line at a
  * value on that axis, with a short label; a value past the axis is drawn at
- * the right edge with its label saying so. `highlight` draws one lag's stem
+ * the right edge with its label saying so. `crossing` draws a dotted vertical
+ * line at that value on the same axis, the lag where the correlogram first
+ * falls inside the band. `highlight` draws one lag's stem
  * thicker and its dot larger in the highlight color, and `onPick(k)` is
  * called with the nearest lag when the plot is clicked or tapped.
  * @param {Figure} fig
  * @param {ArrayLike<number>} r autocorrelations r_0 .. r_L
  * @param {{ band?: number, color?: string, axes?: boolean, from?: number, lagStep?: number,
- *   marker?: { at: number, label?: string, color?: string },
+ *   marker?: { at: number, label?: string, color?: string }, crossing?: number,
  *   highlight?: { at: number, label?: string, color?: string },
  *   onPick?: (k: number) => void }} [o]
  */
@@ -1162,6 +1164,11 @@ export function correlogram(fig, r, o = {}) {
       svgEl('line', { x1: 0, x2: fig.iw, y1: y, y2: y, stroke: tok('--truth'), 'stroke-width': 1.4, 'stroke-dasharray': '5,4', class: 'm-band' }, fig.inner);
       fig.series.push({ kind: 'hline', y: b, dash: true, color: tok('--truth'), label: b > 0 ? 'band for an independent series' : undefined });
     }
+  }
+  if (Number.isFinite(o.crossing)) {
+    const x = r1(sx(o.crossing));
+    svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: tok('--muted'), 'stroke-width': 1.6, 'stroke-dasharray': '1.5,3', class: 'm-crossing' }, fig.inner);
+    fig.series.push({ kind: 'vline', x: o.crossing, dash: true, color: tok('--muted'), label: 'crossing lag' });
   }
   if (o.marker && Number.isFinite(o.marker.at)) {
     const mc = col(o.marker.color, '--ok');

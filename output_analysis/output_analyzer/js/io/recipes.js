@@ -25,7 +25,7 @@ import { welch, pooledT, pairedT, levene, planHalfWidthWelch, planHalfWidthPoole
          anova, posthoc, posthocWelch, powerAnova, planPowerAnova, constantDifferences, benchmarkFamily } from '../stats/compare.js';
 import { bonferroniFamilyRank, benchmarkFamilyRank } from '../stats/nonparam.js';
 import { subsetSelection } from '../stats/select.js';
-import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS, ensembleBand } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS, ensembleBand, bandCrossing } from '../stats/steadystate.js';
 import { slug } from './export.js';
 import { applyTransform, backTransform, backInterval, transformOf, isTransform } from '../stats/transform.js';
 import { roleLabels, outcomeAxis, shortNames, estimateAxis, histChoice } from '../ui/rules.js';
@@ -938,13 +938,13 @@ export function steadyRecipe(o) {
   // correlogram forms it: a time-persistent series is first averaged over
   // ACF_STEPS equal steps of simulation time and is used only when every step
   // is covered; a tally series needs at least 8 observations.
-  let series = null;
+  let series = null, lagStep = 1;
   if (kept && kept.v.length) {
     if (kind === 'time') {
       const a = kept.t[0], z = kept.end;
       if (z > a) {
-        const rs = resampleTimeWeighted(kept.t, kept.v, a, z, ACF_STEPS).values;
-        if (Array.prototype.every.call(rs, Number.isFinite)) series = rs;
+        const rs = resampleTimeWeighted(kept.t, kept.v, a, z, ACF_STEPS);
+        if (Array.prototype.every.call(rs.values, Number.isFinite)) { series = rs.values; lagStep = rs.step; }
       }
     } else if (kept.v.length >= 8) series = kept.v;
   }
@@ -952,6 +952,11 @@ export function steadyRecipe(o) {
   if (maxLag >= 1) {
     const ac = acf(series, maxLag);
     for (let j = 1; j <= Math.min(5, maxLag); j++) e['acf lag ' + j] = ac[j];
+    // The crossing lag, in the series' own units, and the batches against it.
+    const k = bandCrossing(ac, 2 / Math.sqrt(series.length));
+    const crossing = k == null ? NaN : k * lagStep;
+    e['acf crossing lag'] = crossing;
+    e['batch size over crossing lag'] = res.ok ? res.size / crossing : NaN;
   }
 
   r.steady = { kind, align, lumped, mode, batchOk: res.ok, reason: res.ok ? '' : res.reason };

@@ -178,3 +178,50 @@ export function histChoice(values, pick) {
   const bins = asked ? Math.max(HIST_BINS_MIN, Math.min(HIST_BINS_MAX, asked)) : sturgesBins(values.length);
   return { perValue: mode === 'value' && canValue, bins, canValue, discrete: info.discrete, rule: info.rule, nUnique: info.nUnique, auto: !asked };
 }
+
+/**
+ * The multiples of the correlogram's crossing lag (`bandCrossing` in
+ * js/stats/steadystate.js) that the batch-size check reads: a batch shorter
+ * than BATCH_SHORT_FACTOR times the lag is too short, and BATCH_TARGET_FACTOR
+ * times it is the cautious target that the suggested run aims at.
+ */
+export const BATCH_SHORT_FACTOR = 3;
+export const BATCH_TARGET_FACTOR = 10;
+
+/**
+ * How the batches compare with the crossing lag, and the run that would give
+ * batches of the cautious target length. Every length is in the series' own
+ * units: observations, or time units for time-persistent data.
+ * @param {{size: number, b: number, span: number, crossing: number|null, maxLag: number, integer: boolean}} o
+ *   `size` and `b` are the batches' size and count, `span` the length of the
+ *   series batched, `crossing` the crossing lag (null when no lag shown is
+ *   inside the band), `maxLag` the last lag shown, and `integer` says that a
+ *   size is a whole number of observations
+ * @returns {null | {tier: 'short'|'check'|'ok'|'unknown', ratio: number, beyond: boolean, lag: number,
+ *   target: {size: number, b: number, run: number}, fits: number, many: boolean}}
+ *   `tier` is 'short' under BATCH_SHORT_FACTOR, 'check' under
+ *   BATCH_TARGET_FACTOR, and 'ok' from there up; with no crossing shown
+ *   (`beyond`), `lag` is the last lag shown and `ratio` an upper bound, and
+ *   so the batches are 'short' when even that bound is short and 'unknown'
+ *   otherwise. `target` is BATCH_TARGET_FACTOR times `lag` rounded up to two
+ *   significant figures, the count kept between 10 and 30, and the run they
+ *   take; `fits` is how many target-size batches this series holds; `many`
+ *   flags more than 30 batches. Null without a batch size or a correlogram.
+ */
+export function batchGuidance({ size, b, span, crossing, maxLag, integer }) {
+  if (!(size > 0) || !(maxLag > 0)) return null;
+  const beyond = crossing == null;
+  const lag = beyond ? maxLag : crossing;
+  const ratio = size / lag;
+  const tier = beyond ? (ratio < BATCH_SHORT_FACTOR ? 'short' : 'unknown')
+    : ratio < BATCH_SHORT_FACTOR ? 'short' : ratio < BATCH_TARGET_FACTOR ? 'check' : 'ok';
+  const tSize = roundUpTwoFigures(BATCH_TARGET_FACTOR * lag, integer);
+  const tb = Math.min(30, Math.max(10, b));
+  return { tier, ratio, beyond, lag, target: { size: tSize, b: tb, run: tb * tSize }, fits: Math.floor(span / tSize + 1e-9), many: b > 30 };
+}
+
+function roundUpTwoFigures(x, integer) {
+  const p = Math.pow(10, Math.floor(Math.log10(x)) - 1);
+  const v = Number((Math.ceil(x / p - 1e-9) * p).toPrecision(12));
+  return integer ? Math.max(1, Math.ceil(v)) : v;
+}

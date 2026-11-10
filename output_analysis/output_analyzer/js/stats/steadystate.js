@@ -556,6 +556,40 @@ export const ACF_MAX_LAG = 400;
 export const ACF_STEPS = 2000;
 
 /**
+ * How many lags in a row the correlogram must stay inside the band for its
+ * first one to count as the crossing lag (`bandCrossing`).
+ */
+export const CROSSING_RUN = 5;
+
+/**
+ * The crossing lag: the first lag k ≥ 1 from which the correlogram stays
+ * inside the band, |r_j| ≤ band, for CROSSING_RUN lags in a row (k through
+ * k + CROSSING_RUN − 1, or through the last lag shown, if sooner). The run
+ * keeps an oscillating correlogram, one that passes through zero on its way
+ * from a negative r_1 to a positive r_3, from being read as crossing at
+ * lag 2; a short run, rather than a requirement to stay inside for good,
+ * keeps the slow wander of a correlated series' sample correlogram back
+ * outside a band drawn for an uncorrelated one from pushing the crossing far
+ * later. Null when no lag shown qualifies, or when the correlogram is
+ * undefined (a constant series, whose every r is NaN).
+ * @param {ArrayLike<number>} r autocorrelations r_0 .. r_L
+ * @param {number} band the half-width of the band, 2/√n
+ * @returns {number|null}
+ */
+export function bandCrossing(r, band) {
+  const L = r.length - 1;
+  for (let k = 1; k <= L; k++) {
+    let inside = true;
+    for (let j = k; j <= Math.min(L, k + CROSSING_RUN - 1); j++) {
+      if (!Number.isFinite(r[j])) return null;
+      if (Math.abs(r[j]) > band) { inside = false; break; }
+    }
+    if (inside) return k;
+  }
+  return null;
+}
+
+/**
  * Resamples a time-persistent trajectory onto `steps` equal intervals of [start, end]: each value
  * is the time average of the trajectory over its interval, as alignByTime computes for one bin. A
  * series on equal time steps is what an autocorrelation of time-persistent output needs because the

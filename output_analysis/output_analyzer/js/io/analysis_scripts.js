@@ -1515,31 +1515,60 @@ function steadyBody(r, L) {
   // The autocorrelation of the kept series.
   const acfN = Object.keys(e).filter(k => /^acf lag \d+$/.test(k)).length;
   out.push(L.sect('Autocorrelation of the series after truncation'));
-  out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported. ' +
+  out.push(...commentLines(c, 'As the page\'s correlogram: lags 1 to min(max_lag, n/4), of which the first five are reported, and the crossing lag, the first lag from which the autocorrelation stays inside the band of 2/sqrt(n) for 5 lags in a row, with the batch size as a multiple of it. ' +
     (time ? 'The trajectory is first averaged over n_steps equal intervals of simulation time because its records arrive at uneven times, and the correlogram is drawn only when every interval is covered.'
       : 'It needs at least 8 observations.'), c));
   const tooShort = 'The series after truncation is too short for its autocorrelation.';
   const report5 = [], hoistA = [];
   loopReport(L, report5, { hoist: hoistA, name: 'acf lag %d', count: lang === 'R' ? 'length(ac)' : lang === 'py' ? 'len(ac)' : 'numel(ac)',
     value: i => (lang === 'm' ? 'ac(' + i + ')' : 'ac[' + i + ']'), page: Array.from({ length: acfN }, (_, j) => e['acf lag ' + (j + 1)]), pageVar: 'page_acf', indent: ind });
+  const cross = [rep(L, r, 'acf crossing lag', 'crossing'), rep(L, r, 'batch size over crossing lag', 'ratio')];
   if (lang === 'R') {
     out.push(...hoistA, 'max_lag <- 400; n_steps <- 2000', 'series <- NULL');
     if (time) out.push('if (length(bv) && isTRUE(b_end > bt[1])) {', '  s <- resample_tw(bt, bv, bt[1], b_end, n_steps)', '  if (all(is.finite(s))) series <- s', '}');
     else out.push('if (length(bv) >= 8) series <- bv');
     out.push('n_lags <- if (is.null(series)) 0 else min(max_lag, floor(length(series) / 4))',
-      'if (n_lags >= 1) {', ind + 'ac <- acf_lags(series, min(5, n_lags))', ...report5, '} else cat("' + tooShort + '\\n")');
+      'if (n_lags >= 1) {', ind + 'ac_all <- acf_lags(series, n_lags)', ind + 'ac <- ac_all[seq_len(min(5, n_lags))]', ...report5,
+      ind + 'lag_step <- ' + (time ? '(b_end - bt[1]) / n_steps' : '1'),
+      ind + 'acf_band <- 2 / sqrt(length(series)); crossing <- NaN',
+      ind + 'for (k in seq_len(n_lags)) {',
+      ind + '  w <- ac_all[k:min(n_lags, k + 4)]',
+      ind + '  if (!all(is.finite(w))) break',
+      ind + '  if (all(abs(w) <= acf_band)) { crossing <- k * lag_step; break }',
+      ind + '}',
+      ind + 'ratio <- if (bm$ok) bm$size / crossing else NaN', ...cross.map(x => ind + x),
+      '} else cat("' + tooShort + '\\n")');
   } else if (lang === 'py') {
     out.push(...hoistA, 'max_lag = 400; n_steps = 2000', 'series = None');
     if (time) out.push('if len(bv) and b_end > bt[0]:', '    s = resample_tw(bt, bv, bt[0], b_end, n_steps)', '    if np.all(np.isfinite(s)): series = s');
     else out.push('if len(bv) >= 8: series = bv');
     out.push('n_lags = 0 if series is None else min(max_lag, len(series) // 4)',
-      'if n_lags >= 1:', ind + 'ac = acf_lags(series, min(5, n_lags))', ...report5, 'else:', ind + 'print("' + tooShort + '")');
+      'if n_lags >= 1:', ind + 'ac_all = acf_lags(series, n_lags)', ind + 'ac = ac_all[:min(5, n_lags)]', ...report5,
+      ind + 'lag_step = ' + (time ? '(b_end - bt[0]) / n_steps' : '1'),
+      ind + 'acf_band = 2 / np.sqrt(len(series)); crossing = float("nan")',
+      ind + 'for k in range(1, n_lags + 1):',
+      ind + '    w = ac_all[k - 1:min(n_lags, k + 4)]',
+      ind + '    if not np.all(np.isfinite(w)): break',
+      ind + '    if np.all(np.abs(w) <= acf_band):',
+      ind + '        crossing = k * lag_step',
+      ind + '        break',
+      ind + 'ratio = bm["size"] / crossing if bm["ok"] else float("nan")', ...cross.map(x => ind + x),
+      'else:', ind + 'print("' + tooShort + '")');
   } else {
     out.push(...hoistA, 'max_lag = 400; n_steps = 2000;', 'series = [];');
     if (time) out.push('if ~isempty(bv) && b_end > bt(1)', '    s = resample_tw(bt, bv, bt(1), b_end, n_steps);', '    if all(isfinite(s)), series = s; end', 'end');
     else out.push('if numel(bv) >= 8, series = bv; end');
     out.push('n_lags = min(max_lag, floor(numel(series) / 4));',
-      'if n_lags >= 1', ind + 'ac = acf_lags(series, min(5, n_lags));', ...report5, 'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
+      'if n_lags >= 1', ind + 'ac_all = acf_lags(series, n_lags);', ind + 'ac = ac_all(1:min(5, n_lags));', ...report5,
+      ind + 'lag_step = ' + (time ? '(b_end - bt(1)) / n_steps;' : '1;'),
+      ind + 'acf_band = 2 / sqrt(numel(series)); crossing = NaN;',
+      ind + 'for k = 1:n_lags',
+      ind + '    w = ac_all(k:min(n_lags, k + 4));',
+      ind + '    if ~all(isfinite(w)), break; end',
+      ind + '    if all(abs(w) <= acf_band), crossing = k * lag_step; break; end',
+      ind + 'end',
+      ind + 'if bm.ok, ratio = bm.size / crossing; else, ratio = NaN; end', ...cross.map(x => ind + x),
+      'else', ind + "fprintf('" + tooShort + "\\n');", 'end');
   }
 
   return { body: out, need };

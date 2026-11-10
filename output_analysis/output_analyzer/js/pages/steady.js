@@ -7,7 +7,7 @@
 // starts at no truncation and moves only when the reader moves it.
 
 import * as state from '../state.js';
-import { alignByIndex, alignByTime, ensembleBand, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS } from '../stats/steadystate.js';
+import { alignByIndex, alignByTime, ensembleBand, movingAverage, gapAwareAverage, cumulativeAverage, batchMeans, concatenateReps, resampleTimeWeighted, ACF_MAX_LAG, ACF_STEPS, bandCrossing, CROSSING_RUN } from '../stats/steadystate.js';
 import { acf } from '../stats/descriptive.js';
 import { truncateDataset, truncationView } from '../data/model.js';
 import { makeFigure, welchPlot, batchPlot, correlogram, lagPlot, dragLine, legend, exportButtons, niceStep, tok, svgEl } from '../ui/plots.js';
@@ -17,6 +17,7 @@ import { spinner, card, levelSelect, details, notice, KIND_LABEL, DF_LABEL } fro
 import { num, fixed, pct, pValue, plural, intl, esc, dash, pEq, lvl } from '../ui/format.js';
 import { registerTips } from '../ui/tooltip.js';
 import { currentSection } from '../ui/tabs.js';
+import { batchGuidance, BATCH_SHORT_FACTOR, BATCH_TARGET_FACTOR } from '../ui/rules.js';
 
 /** The page's hash id. */
 export const id = 'steady';
@@ -180,7 +181,8 @@ const TIP = {
   reps: 'Each replication’s own series on the shared axis, drawn thin and gray behind the averages: the paths the ensemble average is the mean of, and how far they scatter around it.',
   band: 'At each time bin or observation index, the t interval on the ensemble average across the replications contributing there, at the page’s confidence level. The band says how well the average is known at each point, not where one run would fall. Where it is wide, more replications would steady the curve; its width says nothing about where the warm-up ends.',
   r1: 'The sample autocorrelation at lag one: the correlation between each batch mean and the next, a signed correlation (approximately the signed square root of R²). Independent batch means give a value near zero. C is Fishman’s test statistic, r₁ with an end correction scaled by √((b² − 1)/(b − 2)), which is close to standard normal when the batch means are independent, and p is its one-sided p-value for the test of no positive correlation.',
-  cut: 'The same cut as the warm-up plot: changing it here moves the dashed line there.'
+  cut: 'The same cut as the warm-up plot: changing it here moves the dashed line there.',
+  cross: 'The crossing lag is the first lag from which the correlogram below stays inside the ±2/√n band for ' + CROSSING_RUN + ' lags in a row, where the dotted line marks it. Batch means are close to independent when each batch spans several times that lag: about ' + BATCH_TARGET_FACTOR + ' times is the cautious target, and under ' + BATCH_SHORT_FACTOR + ' times the interval is usually too narrow.'
 };
 
 function tipSpan(text, tip) {
@@ -994,8 +996,9 @@ function batchSource(ds) {
 // ── Autocorrelation after truncation ──────────────────────────────────────
 
 /**
- * The autocorrelation of the kept series at lags 1 … L, L = min(400, n/4).
- * A time-persistent series is first averaged over equal time steps, and its
+ * The autocorrelation of the kept series at lags 1 … L, L = min(400, n/4),
+ * with its crossing lag (null when none is shown; see bandCrossing). A
+ * time-persistent series is first averaged over equal time steps, and its
  * lags are in time units. Cached with the kept series it came from.
  */
 function acfData(ds) {
@@ -1016,7 +1019,11 @@ function acfData(ds) {
       const n = k.v.length, L = Math.min(ACF_MAX_LAG, Math.floor(n / 4));
       if (n >= 8 && L >= 1) val = { r: acf(k.v, L), n, L, step: 1, byTime: false };
     }
-    if (val) val.band = 2 / Math.sqrt(val.n);
+    if (val) {
+      val.band = 2 / Math.sqrt(val.n);
+      const c = bandCrossing(val.r, val.band);
+      val.crossing = c == null ? null : c * val.step;
+    }
   }
   acfCache = { kept: k, val };
   return val;
@@ -1027,7 +1034,7 @@ function acfData(ds) {
  * the lag-one r1 the page screens on. The frame is sized to the means, so
  * the cloud fills it at any batch count.
  */
-function drawLag(res) {
+function drawLag(res, G) {
   const items = [{ swatch: 'dot', color: '--est', label: 'one pair of neighboring batch means' }, { swatch: 'dash', color: '--truth', label: 'identity line' }];
   if (!res || res.b < 3) {
     lagFig.render(f => emptyPlot(f, res ? 'Too few batches for a lag-one scatter' : 'No batches yet'));
@@ -1056,7 +1063,16 @@ function drawLag(res) {
       (hasC
         ? '<div>Fishman’s <b><span class="sym">C</span> = ' + num(res.lag1Test.C, 3) + '</b></div>' +
           '<div>one-sided <b>' + pEq(res.lag1Test.p) + '</b></div>' +
-          '<div class="ss-stat-verdict">' + (rejects ? 'autocorrelation detected at the ' + alpha + ' level' : 'no autocorrelation detected at the ' + alpha + ' level') + '</div>'
+          '<div class="ss-stat-verdict">' + (rejects ? 'autocorrelation detected at the ' + alpha + ' level' : 'no autocorrelation detected at the ' + alpha + ' level') + '</div>' +
+          (!rejects && G && G.tier === 'short'
+            ? '<div>With ' + intl(b) + ' batches this test has little power. That each batch is ' + (G.beyond ? 'under ' : 'only ') + fixed(G.ratio, 1) + '× the crossing lag is the stronger sign that the batches are too short.</div>'
+            : '') +
+          // An r1 more than one standard error (about 1/√b) below zero; it is
+          // called noise only while C stays short of the lower tail's critical value.
+          (!rejects && res.lag1 < -1 / Math.sqrt(b)
+            ? '<div>A negative <span class="sym">r<sub>1</sub></span> errs on the safe side: negative correlation between neighboring batch means makes the interval wider than it needs to be.' +
+              (1 - res.lag1Test.p >= 1 - res.level ? ' With ' + intl(b) + ' batches, much of it is also sampling noise.' : '') + '</div>'
+            : '')
         : '<div class="ss-stat-verdict">too few batches for Fishman’s test</div>') +
     '</div>' +
     '<p class="ss-cap">Each point pairs a batch mean with the next one, ' + intl(b - 1) + ' pairs from ' + plural(b, 'batch', 'batches') +
@@ -1066,6 +1082,15 @@ function drawLag(res) {
       'Fewer, longer batches pull <span class="sym">r<sub>1</sub></span> toward zero but leave fewer points here, which is why the test has little power with few batches.</p>';
 }
 
+// The conventions the batch-size check reads, said once for both captions.
+const BATCH_RULES = 'Batches should span several times the crossing lag (about ' + BATCH_TARGET_FACTOR + ' times to be cautious), there should be 10 to 30 of them, and their means should show little lag-one correlation; when these conflict, the run needs to be longer.';
+
+// A length on the batching axis: observations, or time units (whole and with
+// thousands separators from 1,000 up, as a count of observations is).
+function lagText(x, byTime) {
+  return byTime ? (x >= 1000 ? intl(Math.round(x)) : num(x, 4)) + ' time units' : plural(x, 'observation');
+}
+
 function drawAcf(ds, res) {
   const A = ds ? acfData(ds) : null;
   const byTime = !!ds && ds.kind === 'time';
@@ -1073,7 +1098,7 @@ function drawAcf(ds, res) {
   if (!A) {
     acfFig.render(f => emptyPlot(f, ds ? 'Too few observations after truncation for a correlogram' : 'No dataset yet'));
     legend(el.aleg, [], acfFig);
-    el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size.';
+    el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. ' + BATCH_RULES + ' The dashed vertical line is the current batch size.';
     return;
   }
   const marker = res && res.ok ? res.size : null;
@@ -1094,7 +1119,7 @@ function drawAcf(ds, res) {
         Math.abs(A.r[k]) <= A.band ? 'inside the ±2/√n band' : 'outside the ±2/√n band'
       ];
     });
-    correlogram(f, A.r, { band: A.band, from: 1, lagStep: A.step, marker: marker == null || drag ? null : { at: marker, label: sizeText, color: '--ok' } });
+    correlogram(f, A.r, { band: A.band, from: 1, lagStep: A.step, crossing: A.crossing == null ? NaN : A.crossing, marker: marker == null || drag ? null : { at: marker, label: sizeText, color: '--ok' } });
     if (drag) {
       dragLine(f, {
         value: marker, color: '--ok', ariaLabel: byTime ? 'Batch length' : 'Batch size', step: drag.step,
@@ -1107,9 +1132,14 @@ function drawAcf(ds, res) {
     { swatch: 'line', color: '--est', label: 'autocorrelation at each lag' },
     { swatch: 'dash', color: '--truth', label: '±2/√n band, n = ' + intl(A.n) }
   ];
+  if (A.crossing != null) items.push({ swatch: 'dotted', color: '--muted', label: 'crossing lag, ' + lagText(A.crossing, byTime) });
   if (marker != null) items.push({ swatch: 'dash', color: '--ok', label: 'current ' + (byTime ? 'batch length' : 'batch size') + (drag ? ' (drag it to change the batches)' : '') });
   legend(el.aleg, items, acfFig);
-  el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. Batches should span several times the lag at which it falls inside the band; the dashed vertical line is the current batch size. ' +
+  el.acap.textContent = 'This correlogram is the autocorrelation of the kept series at each lag. ' +
+    (A.crossing != null
+      ? 'The dotted line marks the crossing lag, the first lag from which it stays inside the band for ' + CROSSING_RUN + ' lags in a row; past it, the correlogram of a correlated series can wander back outside a band drawn for an uncorrelated one. '
+      : 'From no lag shown does it stay inside the band for ' + CROSSING_RUN + ' lags in a row, and so the crossing lag lies past the last one. ') +
+    BATCH_RULES + ' The dashed vertical line is the current batch size. ' +
     (drag
       ? 'Drag it to set the batch size' + (mode === 'count' ? ', which here sets the number of batches that gives that size' : '') + '.'
       : 'The batch size lies past the lags shown, and so the line sits at the edge.') +
@@ -1173,11 +1203,12 @@ function placeholderCards() {
     card(DF_LABEL, dash, 'b − 1'),
     card(pct(L, 0) + ' interval', dash, 'mean ± half-width'),
     card('Half-width', dash, 't = ' + dash),
-    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), dash, 'Fishman’s C = ' + dash + ', p = ' + dash)
+    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), dash, 'Fishman’s C = ' + dash + ', p = ' + dash),
+    crossCard(null, false)
   ];
 }
 
-function resultCards(res, byTime) {
+function resultCards(res, byTime, G) {
   const L = res.level;
   const q = 1 - (1 - L) / 2;
   return [
@@ -1189,8 +1220,49 @@ function resultCards(res, byTime) {
     card(DF_LABEL, intl(res.df), 'b − 1'),
     card(pct(L, 0) + ' interval', '[' + num(res.lo) + ', ' + num(res.hi) + ']', 'mean ± half-width'),
     card('Half-width', num(res.hw), 't<sub>' + fixed(q, 3) + ', ' + res.df + '</sub> = ' + num(res.t)),
-    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), num(res.lag1), 'Fishman’s C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p))
+    card(tipSpan('Lag-one <span class="sym">r<sub>1</sub></span>', TIP.r1), num(res.lag1), 'Fishman’s C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p)),
+    crossCard(G, byTime)
   ];
+}
+
+// The batch size as a multiple of the crossing lag: red when the batches are
+// too short, green from the cautious target up.
+function crossCard(G, byTime) {
+  const lbl = tipSpan((byTime ? 'Batch length' : 'Batch size') + ' ÷ crossing lag', TIP.cross);
+  if (!G) return card(lbl, dash, 'crossing lag ' + dash);
+  const c = card(lbl, (G.beyond ? '< ' : '') + fixed(G.ratio, 1) + '×',
+    G.beyond ? 'no crossing through ' + lagText(G.lag, byTime) : 'crossing lag ' + lagText(G.lag, byTime));
+  if (G.tier === 'short') c.classList.add('card-bad');
+  else if (G.tier === 'ok') c.classList.add('card-good');
+  return c;
+}
+
+// What the batch-size check says under the cards, as [kind, html] pairs: a
+// warning with the run that would fix batches that are too short, a note
+// asking for a look at r1 when they are short of the cautious target or
+// cannot be compared, and a note on more than 30 batches.
+function guidanceNotes(G, byTime) {
+  if (!G) return [];
+  const out = [], len = x => lagText(x, byTime), T = G.target;
+  const ratio = fixed(G.ratio, 1) + '×', target = BATCH_TARGET_FACTOR + '×';
+  const r1Check = 'check that the lag-one <span class="sym">r<sub>1</sub></span> in the cards above is near zero.';
+  const past = 'the correlogram does not stay inside the band for ' + CROSSING_RUN + ' lags in a row before a lag of ' + len(G.lag) + ', the last lag shown';
+  if (G.tier === 'short') {
+    const about = G.beyond ? 'at least ' : 'about ';
+    out.push(['warn', 'Batches too short: ' + (G.beyond
+      ? past + ', and so each batch is under ' + ratio + ' the crossing lag. '
+      : 'each batch is ' + ratio + ' the crossing lag of ' + len(G.lag) + ', and about ' + target + ' is the cautious target. ') +
+      (G.fits >= 10
+        ? 'Batches of ' + about + len(T.size) + ' would do, and this run would give ' + intl(G.fits) + ' of them.'
+        : 'Batches of ' + about + len(T.size) + ' would leave only ' + intl(G.fits) + ' from this run, fewer than 10, and so the run needs to be longer: ' +
+          about + len(T.run) + ' would allow ' + T.b + ' of them. The crossing lag is estimated from this run, and a longer run’s narrower band usually puts it somewhat later; check the batches again on the longer run.')]);
+  } else if (G.tier === 'check') {
+    out.push(['info', 'Each batch is ' + ratio + ' the crossing lag of ' + len(G.lag) + ', short of the cautious ' + target + '; ' + r1Check]);
+  } else if (G.tier === 'unknown') {
+    out.push(['info', 'The batches cannot be compared with the crossing lag: ' + past + '. Check that the lag-one <span class="sym">r<sub>1</sub></span> in the cards above is near zero.']);
+  }
+  if (G.many) out.push(['info', 'More than 30 batches add little to the interval and make each batch shorter.']);
+  return out;
 }
 
 function setCards(list) {
@@ -1251,8 +1323,10 @@ function drawBatch() {
     try { res = batchMeans(src.rep, opts); } catch (err) { res = { ok: false, reason: String(err.message || err) }; }
   }
   lastBatch = res;
+  const A = acfData(ds);
+  const G = res.ok && A ? batchGuidance({ size: res.size, b: res.b, span: byTime ? batchSpan(ds) : res.nUsed, crossing: A.crossing, maxLag: A.L * A.step, integer: !byTime }) : null;
   drawAcf(ds, res);
-  drawLag(res.ok ? res : null);
+  drawLag(res.ok ? res : null, G);
 
   const resp = ds.response && ds.response !== 'value' ? ds.response : 'value';
   batchFig.opts.xLabel = byTime ? 'Simulation time' : 'Observation';
@@ -1272,8 +1346,9 @@ function drawBatch() {
   }
 
   el.unit.innerHTML = unitText(ds, src, res);
-  setCards(resultCards(res, byTime));
+  setCards(resultCards(res, byTime, G));
   for (const msg of res.warnings) el.warns.appendChild(notice('warn', esc(msg)));
+  for (const [kind, html] of guidanceNotes(G, byTime)) el.warns.appendChild(notice(kind, html));
 
   const S = batchSeries(ds, src, res);
   batchFig.render(f => {
@@ -1312,8 +1387,8 @@ function drawBatch() {
     rows.map(r => '<tr><td>' + r[0] + '</td><td>' + (byTime ? num(r[1], 6) : intl(r[1])) + '</td><td>' + (byTime ? num(r[2], 6) : intl(r[2])) + '</td><td>' + intl(r[3]) + '</td><td>' + num(r[4], 6) + '</td></tr>').join('') +
     '</tbody></table>';
 
-  lastStored = { ds, src, res, rows };
-  storeResult(ds, src, res, rows);
+  lastStored = { ds, src, res, rows, G };
+  storeResult(ds, src, res, rows, G);
 }
 
 /**
@@ -1323,10 +1398,10 @@ function drawBatch() {
  */
 function restoreResult() {
   const ds = current();
-  if (lastStored && lastStored.ds === ds && lastBatch === lastStored.res) storeResult(ds, lastStored.src, lastStored.res, lastStored.rows);
+  if (lastStored && lastStored.ds === ds && lastBatch === lastStored.res) storeResult(ds, lastStored.src, lastStored.res, lastStored.rows, lastStored.G);
 }
 
-function storeResult(ds, src, res, rows) {
+function storeResult(ds, src, res, rows, G) {
   const rep = src.rep;
   const byTime = res.byTime;
   const truncation = cut > 0 ? 'by ' + (align === 'index' ? 'index' : 'time') + ' at ' + fmtCut(cut).replace(/,/g, '') : 'none';
@@ -1358,12 +1433,15 @@ function storeResult(ds, src, res, rows) {
     ['upper', res.hi],
     ['lag-one r1', res.lag1],
     ['lag-one C', res.lag1Test.C],
-    ['lag-one p', res.lag1Test.p]
+    ['lag-one p', res.lag1Test.p],
+    ['crossing lag', G && !G.beyond ? G.lag : NaN],
+    ['batch size / crossing lag', G && !G.beyond ? G.ratio : NaN]
   ];
   const summaryHtml = '<p>Batch means on ' + (src.lumped ? plural(src.nReps, 'replication') + ' concatenated, of ' : ds.reps.length > 1 ? 'replication ' + esc(String(rep.id)) + ' of ' : '') + esc(ds.name) +
     ' (truncation ' + esc(truncation) + '): b = ' + res.b + ' batches of ' + num(res.size, 6) + (byTime ? ' time units' : ' observations') +
     ', mean ' + num(res.mean) + ', ' + pct(res.level, 0) + ' interval [' + num(res.lo) + ', ' + num(res.hi) + '] (half-width ' + num(res.hw) + '); lag-one r<sub>1</sub> = ' +
-    num(res.lag1) + ' (C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p) + ').</p>';
+    num(res.lag1) + ' (C = ' + num(res.lag1Test.C, 3) + ', ' + pEq(res.lag1Test.p) + ')' +
+    (G && !G.beyond ? '; each batch is ' + fixed(G.ratio, 1) + '× the crossing lag of ' + esc(lagText(G.lag, byTime)) : '') + '.</p>';
   const title = 'Steady state: batch means';
   // The regenerate scripts' recipe is built only when a button asks for one,
   // from the settings as they stand now; whether the records are too many for
