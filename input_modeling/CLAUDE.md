@@ -231,7 +231,11 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      they cut runs high, because the data place their start only loosely. The normal, the Johnson
      members, the triangular, and the PERT may cut up to `CUT_DEEP_MASS` (99.9%), and so a normal
      can peak below 0; it recovered a normal(−2, 2) cut at 0 and never reached the limit. A fit at
-     its limit is `cutLimit`. In the default mode (`floor0` alone), a family that cannot produce
+     its limit is `cutLimit`. A start, a mirror image's end, or a beta's lower end also stops
+     `JOHNSON_EDGE` (20) ranges from the data (`startLimit`, labeled and explained in the note, the
+     scripts holding to the same wall): within the share limit, a log-logistic ran off toward its
+     logistic limit to a start of −66488 and a scale of 66490, and its six-figure export lines drew
+     a mean of 1.519 for a model whose mean is 1.560. In the default mode (`floor0` alone), a family that cannot produce
      an exact 0 in the data once its start or minimum is held at 0 is cut instead of failing
      (`cutForZero`), and its bootstrap refits with the cut too. The fit card's `cutNote` says what
      was cut and why, that the parameters describe the model before the cut, when a fit stopped at

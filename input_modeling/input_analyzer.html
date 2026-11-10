@@ -5406,6 +5406,21 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   var Lcap = dist.key === 'beta' && base.ok ? base.p[2] : null;
   if (dist.key === 'beta' && !rec) Lcap = Math.min(Lcap === null ? Infinity : Lcap, s.min - dLow);
   var cap = cutCap(dist);
+  /* How far the start (a mirror image's end, a beta's lower end) may run
+     from the data: JOHNSON_EDGE ranges, the distance at which a Johnson
+     member is said to have reached its limit. A shifted family that runs
+     off is turning into its symmetric limit (the gamma, lognormal, and
+     Weibull toward a normal, the log-logistic toward a logistic), and on
+     the way its start and scale grow together into numbers whose
+     difference is the data: a log-logistic reached a start of -66488 and a
+     scale of 66490, and its six-figure export lines drew a mean of 1.519
+     for a model whose mean is 1.560. A fit stopped there is startLimit. */
+  var far = JOHNSON_EDGE * range;
+  var gLo = s.min - far, cHi = s.max + far;
+  function beyond(p, g) {
+    if (shiftFree && (reflect ? g > cHi : g < gLo)) return true;
+    return Lcap !== null && p[2] < gLo;
+  }
 
   function keepOf(p, g) {
     var k = reflect ? dist.cdf(g, p) : 1 - dist.cdf(-g, p);
@@ -5413,6 +5428,7 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   }
   var y = new Array(n);
   function loglik(p, g) {
+    if (beyond(p, g)) return -Infinity;
     var keep = keepOf(p, g), ll;
     if (!(keep >= 1 - cap)) return -Infinity;
     if (C) {
@@ -5473,6 +5489,9 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
     if (shiftFree && !reflect && !(g < gHi)) g = gHi - 0.1 * spread;
     if (shiftFree && reflect && !(g > cLo)) g = cLo + 0.1 * spread;
     if (Lcap !== null && !(q[2] < Lcap)) q[2] = Lcap - 0.01 * range;
+    if (shiftFree && !reflect && !(g > gLo)) g = gLo + 0.5 * far;
+    if (shiftFree && reflect && !(g < cHi)) g = cHi - 0.5 * far;
+    if (Lcap !== null && !(q[2] > gLo)) q[2] = gLo + 0.5 * far;
     if (lockU && base.ok) q[3] = base.p[3];
     for (var b = 0; b < 60 && !(keepOf(q, g) >= 1 - 0.9 * cap); b++) {
       if (!shiftFree) return;
@@ -5539,6 +5558,8 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
            atBound: false, degenerate: false, shiftHeld: shiftHeld,
            floor0: !reflect, floorBound: false, cut0: true, cut: 0, cutMass: 1 - keep,
            cutLimit: 1 - keep > cap - 1e-3 * (1 - cap) - 1e-6, rec: rec,
+           startLimit: (shiftFree && (reflect ? cHi - res.g : res.g - gLo) < 0.01 * far) ||
+                       (Lcap !== null && res.p[2] - gLo < 0.01 * far),
            edge: edge, orderStat: dist.key === 'beta' ? [3] : null,
            fixed: held ? fixed.slice() : null, allHeld: held && nFree === 0 && !shiftFree };
 }
@@ -7719,6 +7740,12 @@ function rangeScripts(fit, x, seed, B, src) {
   /* A cut fit's start, minimum, or parameters are only loosely placed for a
      shifted family or a beta, and its numbers are printed without a verdict. */
   var loose = cut && ((d.shiftable && !refl) || d.key === 'beta');
+  /* The page stops a truncated model's start (a mirror image's end, a
+     beta's lower end) JOHNSON_EDGE ranges from the data (see fitCut), and
+     so do the scripts. */
+  var farS = JOHNSON_EDGE * (s.max - s.min);
+  var wallS = cut && estS ? (refl ? s.max + farS : s.min - farS) : null;
+  var wallL = cut && d.key === 'beta' && est.indexOf(2) >= 0 ? s.min - farS : null;
   var th = fit.p.slice(); if (hasS) th.push(fit.shift);
   var S = np + 1;   /* the shift's place in th, counted from 1 */
   var D = ksStat(s.sorted, gofCdf(fit), fitAtom(fit)).D;
@@ -7853,6 +7880,8 @@ function rangeScripts(fit, x, seed, B, src) {
     'nll <- function(t, th0, C) {\n' +
     '  th <- unpack(t, th0, C)\n' +
     (floor0 ? '  if (th[' + S + '] < 0) return(1e300)\n' : '') +
+    (wallS !== null ? '  if (th[' + S + '] ' + (refl ? '>' : '<') + ' ' + P(wallS) + ') return(1e300)   # 20 ranges from the data, as on the page\n' : '') +
+    (wallL !== null ? '  if (th[3] < ' + P(wallL) + ') return(1e300)   # 20 ranges from the data, as on the page\n' : '') +
     (cut ? '  k <- 1 - cdf(0, th)\n  if (!(k >= 1 - cut_max)) return(1e300)\n' : '') +
     (rc ? '  pr <- cdf(C$hi, th) - cdf(' + (cut ? 'pmax(C$lo, 0)' : 'C$lo') + ', th)\n' +
           '  if (any(!(pr > 0))) return(1e300)\n' +
@@ -7951,6 +7980,8 @@ function rangeScripts(fit, x, seed, B, src) {
     'def nll(t, th0, C):\n' +
     '    th = unpack(t, th0, C)\n' +
     (floor0 ? '    if th[' + np + '] < 0:\n        return 1e300\n' : '') +
+    (wallS !== null ? '    if th[' + np + '] ' + (refl ? '>' : '<') + ' ' + P(wallS) + ':   # 20 ranges from the data, as on the page\n        return 1e300\n' : '') +
+    (wallL !== null ? '    if th[2] < ' + P(wallL) + ':   # 20 ranges from the data, as on the page\n        return 1e300\n' : '') +
     '    with np.errstate(all="ignore"):\n' +
     (cut ? '        k = 1 - cdf(0.0, th)\n' : '') +
     (rc ? '        pr = cdf(C["hi"], th) - cdf(' + (cut ? 'np.maximum(C["lo"], 0.0)' : 'C["lo"]') + ', th)\n'
@@ -8095,6 +8126,8 @@ function rangeScripts(fit, x, seed, B, src) {
     'function f = nll(t, th0, C, M)\n' +
     '  th = unpack(t, th0, C, M);\n' +
     '  if M.floor0 && th(M.S) < 0, f = 1e300; return; end\n' +
+    (wallS !== null ? '  if th(M.S) ' + (refl ? '>' : '<') + ' ' + P(wallS) + ', f = 1e300; return; end   % 20 ranges from the data, as on the page\n' : '') +
+    (wallL !== null ? '  if th(3) < ' + P(wallL) + ', f = 1e300; return; end   % 20 ranges from the data, as on the page\n' : '') +
     '  k = 1;\n' +
     '  if M.cut\n' +
     '    k = 1 - M.cdf(0, th);\n' +
@@ -12195,6 +12228,9 @@ function renderRanking() {
            'cannot produce with its start held at 0, and so this row is truncated below zero instead.') :
          r.fit.cutLimit ? tipSpan('rank-sub', 'at its limit', 'This fit removes as much of the model ' +
            'as truncation is allowed to, and the likelihood was still rising; the fit details say more.') :
+         r.fit.startLimit ? tipSpan('rank-sub', (r.fit.reflect ? 'end' : r.dist.shiftable ? 'start' : 'lower end') +
+           ' at its limit', 'This fit stopped 20 times the range of your data beyond it, where the search ends, ' +
+           'and the likelihood was still rising; the fit details say more.') :
          (near = nearSpecialCase(r, ST.rows)) ? tipSpan('rank-sub', near.label, near.tip) :
          r.fit.reflect ? '<span class="rank-sub">mirrored: c − X</span>' : '') +
       '</td>' +
@@ -12664,6 +12700,18 @@ function cutNote(r) {
       (d.key === 'normal' || d.key === 'johnsonSU'
         ? ' Truncated that deeply, a ' + distLower(d) + ' is practically an exponential, and the exponential row ' +
           'fits that shape directly.' : '');
+  }
+  if (f.startLimit) {
+    /* The shape each family approaches as its start runs off. */
+    var lim = d.key === 'loglogistic' ? 'logistic'
+            : d.key === 'weibull' ? (f.reflect ? 'largest' : 'smallest') + ' extreme-value (Gumbel)'
+            : d.key === 'beta' ? null : 'normal';
+    out += ' Its ' + (f.reflect ? 'end' : shifted ? 'start' : 'lower end') + ' stopped 20 times the range of ' +
+      'your data ' + (f.reflect ? 'above' : 'below') + ' it, where the search ends, and the likelihood was still ' +
+      'rising there' +
+      (lim ? '. Run that far out, a ' + distLower(d) + ' is nearly a ' + lim + ' distribution, and its ' +
+        'parameters grow without settling' + (lim === 'normal' ? '; the truncated normal row fits that shape directly.' : '.')
+           : ', and so its parameters do not settle.');
   }
   if (shifted || d.key === 'beta') {
     out += ' Other ' + (d.key === 'beta' ? 'lower ends' : 'starts') + ' below 0 fit these data nearly as well, ' +

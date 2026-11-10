@@ -2463,6 +2463,33 @@ section('16e. models cut off at zero');
     }
   }
 
+  /* A start that runs off stops JOHNSON_EDGE ranges below the data: a
+     log-logistic on values from a normal(1, 1.2) truncated below zero ran
+     to a start of -66488 without the wall, and its export lines drifted. */
+  {
+    const uw = IA.MRG32k3a(16905), tn = [];
+    while (tn.length < 150) { const v = 1 + 1.2 * D.normal.sample(uw, [0, 1]); if (v >= 0.005) tn.push(Number(v.toFixed(2))); }
+    const st = IA.summarize(tn), wall = st.min - 20 * (st.max - st.min);
+    const fl = IA.fitDist(D.loglogistic, tn, true, false, null, null, false, cutOpts);
+    const fn = new Function('uniform', 'return ' + IA.expressions(fl).anylogic), ur = IA.MRG32k3a(16920), y = [];
+    for (let i = 0; i < 40000; i++) y.push(fn(() => ur()));
+    y.sort((a, b) => a - b);
+    const ks = IA.ksStat(y, IA.fitCdf(fl), () => 0).D;
+    ok(fl.ok && IA.isCut(fl) && fl.startLimit && fl.shift >= wall && fl.shift < wall + 0.01 * (st.min - wall) + 1e-9 &&
+       ks < 1.63 / Math.sqrt(y.length),
+       `a log-logistic whose start runs off stops at ${fl.ok ? fl.shift.toFixed(2) : '-'}, 20 ranges below the data, ` +
+       `flagged, and its AnyLogic line still draws the model (D = ${ks.toFixed(4)})`);
+    const sp = IA.reproScripts(fl, tn, 7, 20);
+    for (const [lang, cmd, args, ext, code] of [['R', 'Rscript', ['--vanilla'], 'R', sp.r], ['Python', 'python3', ['-I'], 'py', sp.python]]) {
+      const res = runScript(cmd, args, code, ext);
+      if (!res) { console.log(`  (skipped: ${lang} is not installed)`); continue; }
+      const differ = (res.out.match(/\bDIFFERS\b/g) || []).length, agree = (res.out.match(/\bagrees\b/g) || []).length;
+      ok(res.status === 0 && differ === 0 && agree >= 3,
+         `${lang} script for that log-logistic, held to the same wall: ${agree} values agree with the page, ${differ} differ`,
+         res.out.slice(-600));
+    }
+  }
+
   /* The bootstrap's calibration under a true null (jobs cutCalib). */
   {
     const R = CALIB_R, se = Math.sqrt(0.05 * 0.95 / R), band = 4 * se + 0.01;
