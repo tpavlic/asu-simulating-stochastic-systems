@@ -250,8 +250,11 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      is at or above 0 (an Arena Decide loop, a Simio process loop, an AnyLogic do-while). Every
      exact line is held at 0 by a maximum that absorbs only rounding. NORTA's Arena, Simio, and
      AnyLogic blocks refuse a cut family written in Z, for want of the normal quantile. The Simio
-     closed forms use only documented functions but have not been run in Simio, and the Arena and
-     AnyLogic ones have been checked only by evaluating AnyLogic's line as JavaScript. The scripts
+     closed forms use only documented functions but have not been run in Simio. Arena (Academic,
+     16.2x, 100,000 draws) and AnyLogic 8.9.10 PLE (1,000,000 draws) ran the truncated Weibull and
+     log-logistic lines, mirrored and not, and a gamma with a lump at 0, unchanged on 2026-11-09:
+     no draw below 0, every mean within 0.63%, the share at or below the median within 0.0034 of
+     0.5, and the lump's share of zeros within 0.0031 of 0.54. The scripts
      (`rangeScripts`, now for ranges, a cut, or both) maximize the cut likelihood from the page's
      estimates, using each family's density in R and MATLAB (`RANGE_FAM`'s third entry) for values
      recorded exactly, and print each number beside the page's; a cut shifted family's or beta's
