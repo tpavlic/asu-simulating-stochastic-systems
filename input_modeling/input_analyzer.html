@@ -10577,7 +10577,9 @@ var SAMPLES = {
      piling its density up against 0. */
   rework: { name: "Rework time per part (minutes; most parts need none)",
     unit: "minutes of rework per inspected part, 0 for a part that passed",
-    hint: 'Tick the box under these notes that sets the zeros aside, and compare the ranking with and without it.',
+    hint: 'Tick the box under these notes that sets the zeros aside, and see which models come out on top ' +
+          'and how closely they follow the values above 0. The AIC values of the two settings score different ' +
+          'data and cannot be compared with each other.',
     v: [
     0,0,1.21,16.47,0,0,0,3.52,0,0,21.79,9.35,0,3.49,0,0,0,0,3.86,0,0,0,0,0,3.03,
     1.43,2.49,0,4.47,0,1.43,7.56,0,0.98,1.82,0,0,0,6.68,0,5.51,10.99,0,6.84,0,0,0,3.23,0,6.63,
@@ -12585,7 +12587,9 @@ function lumpNote(r) {
     var m = IA.fitMean(f);
     return '<div class="note quiet"><strong>Zeros set aside.</strong> ' + li.n0 + ' of your ' + li.n +
       ' values (' + fmt(100 * li.p0, 3) + '%) are exactly 0. This model describes the ' + (li.n - li.n0) +
-      ' values above 0, and its tests score those alone. A simulation draws 0 with probability ' + P +
+      ' values above 0, and its tests score those alone, as do its log-likelihood, AIC, and BIC, which do ' +
+      'not count the share of zeros as a parameter and so cannot be compared with those of a fit to every ' +
+      'value. A simulation draws 0 with probability ' + P +
       ' and otherwise from this model, as every line in section 6 does' +
       (Number.isFinite(m) ? '. With the zeros, its draws average ' + fmt((1 - li.p0) * m, 5) +
         ' (your values average ' + fmt(ST.sAll.mean, 5) + ')' : '') + '.' +
