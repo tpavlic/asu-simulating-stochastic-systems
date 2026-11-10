@@ -192,6 +192,10 @@ a:focus-visible, textarea:focus-visible {
 /* A switch with many options wraps onto a second line on a phone rather
    than pushing the page wider than the screen. */
 .seg.wrap { flex-wrap: wrap; }
+/* The draggable Δ line on the plot of a column of differences: thin at
+   rest, thicker under the pointer and while it is being dragged. */
+.dl-drag line { stroke-width: 1.5px; transition: stroke-width .12s; }
+.dl-drag:hover line, .dl-drag.on line { stroke-width: 3px; }
 
 /* ── Stat cards ──────────────────────────────────────────────────────── */
 .sg { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap: 8px; }
@@ -850,7 +854,7 @@ footer a:hover { text-decoration: underline; }
         </div>
       </div>
       <div class="plot-card">
-        <div class="plot-hd">The pairs, with each column's histogram</div>
+        <div class="plot-hd" id="pi-plot-hd">The pairs, with each column's histogram</div>
         <svg id="pi-plot" class="plot" viewBox="0 0 460 432" role="img"
              aria-label="Scatter plot of the second column against the first, with each column's histogram on the margins"></svg>
         <div class="plot-cap" id="pi-plot-cap"></div>
@@ -881,8 +885,9 @@ footer a:hover { text-decoration: underline; }
       </span>
     </div>
     <div class="ctrl-note" style="margin-bottom:10px">Set Δ to the smallest mean difference worth
-      detecting, not the one the pilot happened to show. A one-sided test looks for a difference in
-      the direction of Δ's sign. These settings belong to this card alone.</div>
+      detecting, not the one the pilot happened to show. With a single column of differences pasted,
+      the dotted Δ line on the plot can also be dragged. A one-sided test looks for a
+      difference in the direction of Δ's sign. These settings belong to this card alone.</div>
 
     <div class="sg" id="pi-cards"><div class="note quiet" style="grid-column:1/-1">The power
       analysis appears here once a pilot is pasted.</div></div>
@@ -2968,6 +2973,25 @@ function pairedSummary(a, b) {
   };
 }
 
+/* The one-sample t-test of mu = 0 on x, with its (1 - alpha) confidence
+   interval: two-sided ('two'), or the one-sided bound that matches the
+   alternative ('right', mu > 0, gives a lower bound and an interval open
+   to +Infinity; 'left' the reverse). */
+function tTestOne(x, alpha, side) {
+  var n = x.length, m = mean(x), sd = Math.sqrt(sampleVar(x)), se = sd / Math.sqrt(n), nu = n - 1;
+  var t = m / se, out = { n: n, mean: m, sd: sd, se: se, df: nu, t: t };
+  if (side === 'two') {
+    var c = tQuantile(1 - alpha / 2, nu);
+    out.p = 2 * (1 - tCdf(Math.abs(t), nu)); out.lo = m - c * se; out.hi = m + c * se;
+  } else {
+    var c1 = tQuantile(1 - alpha, nu);
+    if (side === 'right') { out.p = 1 - tCdf(t, nu); out.lo = m - c1 * se; out.hi = Infinity; }
+    else { out.p = tCdf(t, nu); out.lo = -Infinity; out.hi = m + c1 * se; }
+  }
+  out.reject = out.p <= alpha;
+  return out;
+}
+
 /* Which value of each column goes in row k when the two columns are
    re-paired: row k holds a[ia[k]] beside b[ib[k]]. Every mode is a
    permutation of the rows as entered, never a composition of earlier
@@ -3058,7 +3082,7 @@ var PA = {
   groupB: groupB, rmsSigma: rmsSigma, welchDf: welchDf, pooledT: pooledT, welchT: welchT,
   parseColumns: parseColumns, pilotColumns: pilotColumns, transposeText: transposeText,
   summarizeCol: summarizeCol, pairedSummary: pairedSummary,
-  pairingOrder: pairingOrder, repairText: repairText,
+  pairingOrder: pairingOrder, repairText: repairText, tTestOne: tTestOne,
   num: num, csvEscape: csvEscape, toCsv: toCsv
 };
 /* ===== PA-CORE-END ===== */
@@ -6207,13 +6231,17 @@ function renderPilotPlot() {
   var svg = $('pi-plot'), cap = $('pi-plot-cap'), ps = PILOT.paired;
   var avail = Math.round(svg.parentNode.clientWidth || 0) || 460;
   var W = Math.max(300, Math.min(avail, 460)), H = Math.round(W * 0.94);
+  if (PILOT.single) { renderDiffPlot(svg, cap, W); return; }
+  $('pi-plot-hd').textContent = 'The pairs, with each column’s histogram';
+  svg.setAttribute('aria-label', 'Scatter plot of the second column against the first, with each ' +
+                   'column’s histogram on the margins');
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
   var fr, s, i;
   if (!ps) {
     fr = frame(W, H, 46, 70, 64, 40, 0, 1, 0, 1);
     s = drawAxes(fr, [], [], 'X₁ (first column)', 'X₂ (second column)');
-    s += svTxt(fr.mL + fr.iw / 2, fr.mT + fr.ih / 2, PILOT.single ? 'One column has no pairs to plot.' :
-               'Paste two columns to plot the pairs.', FONT + ';font-size:12px;fill:' + C.muted, 'middle');
+    s += svTxt(fr.mL + fr.iw / 2, fr.mT + fr.ih / 2, 'Paste two columns to plot the pairs.',
+               FONT + ';font-size:12px;fill:' + C.muted, 'middle');
     svg.innerHTML = s;
     cap.textContent = '';
     return;
@@ -6268,6 +6296,176 @@ function renderPilotPlot() {
               opposite: 'sorted opposite' }[PILOT.pairing];
   cap.innerHTML = ps.n + ' pairs ' + how + ' · ρ̂ = ' + (Number.isFinite(ps.rho) ? N(ps.rho, 4) : '—') +
     ' · ' + k + ' bins on each margin · s<sub>d</sub> is small when the points hug a line parallel to the dashed one';
+}
+
+/* A single column is the differences themselves, and so the plot shows
+   the one-sample t-test on them: the values stacked along one axis, their
+   mean with the (1 - α) interval of this card's α and alternative, and
+   the lines at 0 (the null) and at Δ. A one-sided interval is the bound on
+   the side the alternative points away from, open toward the other. The
+   plot is as tall as its contents need, within limits, and centers them;
+   the Δ line carries a handle that drags Δ (see wirePilotDrag). */
+function renderDiffPlot(svg, cap, W) {
+  var x = PILOT.cols[0], n = x.length, alpha = Number($('pi-alpha').value), d = PILOT.delta;
+  var side = PILOT.sided === 'two' ? 'two' : (d < 0 ? 'left' : 'right'), i;
+  $('pi-plot-hd').textContent = 'The differences, with an interval for their mean';
+  svg.setAttribute('aria-label', 'Dot plot of the differences, with their mean, a confidence ' +
+                   'interval for it, and reference lines at 0 and at the difference to detect, ' +
+                   'which can be dragged');
+  var tt = realSpread(PILOT.single.sd, PILOT.single.mean) ? PA.tTestOne(x, alpha, side) : null;
+
+  /* The axis covers the data, 0, Δ, and the interval's finite ends. While
+     Δ is being dragged it stays as it was when the drag began, and so the
+     scale never moves under the pointer. */
+  var xlo, xhi;
+  if (PILOT.drag) { xlo = PILOT.drag.xlo; xhi = PILOT.drag.xhi; }
+  else {
+    var lo = Math.min(0, d), hi = Math.max(0, d);
+    for (i = 0; i < n; i++) { lo = Math.min(lo, x[i]); hi = Math.max(hi, x[i]); }
+    if (tt) {
+      if (Number.isFinite(tt.lo)) lo = Math.min(lo, tt.lo);
+      if (Number.isFinite(tt.hi)) hi = Math.max(hi, tt.hi);
+    }
+    var span = hi - lo || 1;
+    xlo = lo - 0.08 * span; xhi = hi + 0.08 * span;
+  }
+  var mL = 16, mR = 16, mT = 30, mB = 40;
+  var X = function (v) { return mL + (v - xlo) / (xhi - xlo) * (W - mL - mR); };
+
+  /* The dots, stacked so that none hides another: each takes the lowest
+     level clear of the dots already placed. Below them sit the interval
+     and its label, and the radius shrinks until the whole fits the
+     tallest plot allowed. */
+  var sorted = x.slice().sort(function (p, q) { return p - q; }), r, levels, nLev, content;
+  var maxIh = Math.round(W * 0.62) - mT - mB, minIh = Math.max(100, Math.round(W * 0.4) - mT - mB);
+  for (r = 5; r >= 2; r -= 0.5) {
+    levels = []; nLev = 0;
+    var ends = [];
+    for (i = 0; i < n; i++) {
+      var px = X(sorted[i]), k = 0;
+      while (ends[k] !== undefined && px - ends[k] < 2 * r + 1) k++;
+      ends[k] = px; levels.push(k); nLev = Math.max(nLev, k + 1);
+    }
+    content = 12 + nLev * (2 * r + 1) + 46;
+    if (content <= maxIh) break;
+  }
+  var ih = Math.max(minIh, Math.min(maxIh, content)), H = mT + ih + mB;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  var fr = frame(W, H, mL, mR, mT, mB, xlo, xhi, 0, 1);
+  var s = drawAxes(fr, niceTicks(xlo, xhi, W < 380 ? 5 : 7), [], 'difference X₁ − X₂', null);
+  var top = fr.mT, bot = fr.mT + fr.ih;
+  var base = top + Math.max(0, (ih - content) / 2) + 12 + Math.min(nLev * (2 * r + 1), ih - 58);
+  var ciY = base + 22;
+
+  /* The reference lines, labeled in the top margin. Each label sits on
+     the outer side of its line (the line further left labels leftward, the
+     other rightward), which keeps the two apart however close 0 and Δ are.
+     A label that would run past the edge of the plot moves to the inner
+     side instead, unless it would then overlap the other label. Widths are
+     estimated from the text. Δ is drawn even at 0, where it can still be
+     dragged back out; its line is drawn last, over the dots, as part of
+     the drag target. */
+  var lines = [{ v: 0, lbl: '0 (H₀)', col: C.nullc }, { v: d, lbl: 'Δ = ' + N(d, 4), col: C.altc, delta: true }];
+  lines.sort(function (p, q) { return p.v - q.v; });
+  var span3 = function (L, leftward) {
+    var w = 6.2 * L.lbl.length, lx = fr.X(L.v);
+    return leftward ? [lx - 3 - w, lx - 3] : [lx + 3, lx + 3 + w];
+  };
+  lines.forEach(function (L, j) { L.leftward = j === 0; L.ext = span3(L, L.leftward); });
+  lines.forEach(function (L, j) {
+    if (L.ext[0] >= 2 && L.ext[1] <= W - 2) return;
+    var other = lines[1 - j], ext = span3(L, !L.leftward);
+    if (ext[0] >= 2 && ext[1] <= W - 2 && (ext[1] + 6 < other.ext[0] || ext[0] > other.ext[1] + 6)) {
+      L.leftward = !L.leftward; L.ext = ext;
+    }
+  });
+  lines.forEach(function (L) {
+    var lx = fr.X(L.v);
+    if (!L.delta) s += svLine(lx, top, lx, bot, 'stroke:' + L.col + ';stroke-width:1.5;stroke-dasharray:5 4');
+    s += svTxt(lx + (L.leftward ? -3 : 3), top - 8, L.lbl, FONT + ';font-size:11px;fill:' + L.col,
+               L.leftward ? 'end' : 'start');
+  });
+
+  var maxLev = Math.max(1, Math.floor((ih - 58) / (2 * r + 1)));
+  for (i = 0; i < n; i++)
+    s += '<circle cx="' + N(X(sorted[i]), 6) + '" cy="' + N(base - r - Math.min(levels[i], maxLev - 1) * (2 * r + 1), 6) +
+         '" r="' + r + '" fill="' + C.exact + '" fill-opacity="0.85" stroke="#fff" stroke-width="1"/>';
+
+  var level = N(100 * (1 - alpha), 4) + '%';
+  if (tt) {
+    var x0 = Number.isFinite(tt.lo) ? fr.X(tt.lo) : fr.mL, x1 = Number.isFinite(tt.hi) ? fr.X(tt.hi) : fr.mL + fr.iw;
+    var ink = 'stroke:' + C.text + ';stroke-width:2.5';
+    s += svLine(x0, ciY, x1, ciY, ink);
+    if (Number.isFinite(tt.lo)) s += svLine(x0, ciY - 6, x0, ciY + 6, ink);
+    else s += '<path d="M' + N(x0, 6) + ' ' + ciY + 'l8 -5v10z" fill="' + C.text + '"/>';
+    if (Number.isFinite(tt.hi)) s += svLine(x1, ciY - 6, x1, ciY + 6, ink);
+    else s += '<path d="M' + N(x1, 6) + ' ' + ciY + 'l-8 -5v10z" fill="' + C.text + '"/>';
+    s += '<circle cx="' + N(fr.X(tt.mean), 6) + '" cy="' + ciY + '" r="5" fill="' + C.accent + '"/>';
+    s += svTxt(fr.X(tt.mean), ciY + 18, 'mean, with its ' + (side === 'two' ? '' : 'one-sided ') + level + ' interval',
+               FONT + ';font-size:10.5px;fill:' + C.muted + ';paint-order:stroke;stroke:' + C.bg +
+               ';stroke-width:4px;stroke-linejoin:round', 'middle');
+  }
+
+  /* The Δ line is its own handle: a transparent strip at least 24 CSS
+     pixels wide down the whole line (sized from the scale the plot is
+     drawn at) takes the drag, and hovering it, or dragging, thickens the
+     line. */
+  var dx = fr.X(d), shown = svg.getBoundingClientRect().width, hitW = Math.max(26, 26 * W / (shown || W));
+  s += '<g class="dl-drag' + (PILOT.drag ? ' on' : '') + '">' +
+       svLine(dx, top, dx, bot, 'stroke:' + C.altc + ';stroke-dasharray:2 3') +
+       '<rect data-drag="delta" x="' + N(dx - hitW / 2, 6) + '" y="' + top + '" width="' + N(hitW, 6) +
+       '" height="' + fr.ih + '" fill="transparent" style="cursor:ew-resize;touch-action:none"/></g>';
+  svg.innerHTML = s;
+  PILOT.plotMap = { xlo: xlo, xhi: xhi, W: W, mL: mL, iw: fr.iw };
+
+  if (!tt) {
+    cap.textContent = n + ' differences, all equal, which leaves no spread for an interval.';
+    return;
+  }
+  var what = (side === 'two' ? '' : 'one-sided ') + level + ' interval ' +
+    (side === 'two' ? '[' + N(tt.lo, 4) + ', ' + N(tt.hi, 4) + ']'
+     : side === 'right' ? '[' + N(tt.lo, 4) + ', ∞)' : '(−∞, ' + N(tt.hi, 4) + ']');
+  cap.innerHTML = n + ' differences · mean ' + N(tt.mean, 4) + ' · the ' + what +
+    (tt.reject ? ' excludes' : ' includes') + ' 0, and so the ' + sideWord(PILOT.sided) +
+    ' t-test at α = ' + N(alpha, 3) + (tt.reject ? ' rejects' : ' does not reject') +
+    ' μ<sub>d</sub> = 0 (t = ' + N(tt.t, 4) + ', p = ' + fmtP(tt.p) + ')';
+}
+
+/* Dragging Δ on the plot of a single column. The listeners sit on the svg,
+   whose contents are rebuilt on every change, and the pointer is captured
+   by the svg so that the drag survives the rebuild. Δ snaps to a step two
+   decades below the axis span and stays within the axis frozen at the
+   start of the drag. A touch blocks scrolling only when it starts on the
+   handle, and so a swipe across the rest of the plot still scrolls. The
+   press itself moves nothing: on a touch screen pointerdown comes before
+   touchstart, and redrawing then would detach the handle before its
+   touchstart could cancel the scroll. */
+function wirePilotDrag() {
+  var svg = $('pi-plot');
+  function onHandle(e) { return !!(PILOT.single && e.target.closest && e.target.closest('[data-drag="delta"]')); }
+  function move(e) {
+    var m = PILOT.plotMap, rect = svg.getBoundingClientRect();
+    var vx = (e.clientX - rect.left) / rect.width * m.W;
+    var v = m.xlo + (vx - m.mL) / m.iw * (m.xhi - m.xlo);
+    var step = Math.pow(10, Math.floor(Math.log10(m.xhi - m.xlo)) - 2);
+    v = Math.min(m.xhi, Math.max(m.xlo, Math.round(v / step) * step));
+    v = Number(v.toFixed(Math.max(0, -Math.floor(Math.log10(step)))));
+    if (v === PILOT.delta) return;
+    PILOT.delta = v;
+    $('pi-delta').value = N(v, 6);
+    parsePilot();
+  }
+  svg.addEventListener('pointerdown', function (e) {
+    if (!onHandle(e)) return;
+    e.preventDefault();
+    PILOT.drag = { xlo: PILOT.plotMap.xlo, xhi: PILOT.plotMap.xhi };
+    svg.setPointerCapture(e.pointerId);
+  });
+  svg.addEventListener('pointermove', function (e) { if (PILOT.drag) move(e); });
+  function end() { if (PILOT.drag) { PILOT.drag = null; parsePilot(); } }
+  svg.addEventListener('pointerup', end);
+  svg.addEventListener('pointercancel', end);
+  svg.addEventListener('touchstart', function (e) { if (onHandle(e)) e.preventDefault(); }, { passive: false });
 }
 
 function parsePilot() {
@@ -6828,6 +7026,7 @@ document.addEventListener('DOMContentLoaded', function () {
     b.addEventListener('click', function () { setPairing(b.dataset.pairing, false); });
   });
   $('pi-reshuffle').addEventListener('click', function () { setPairing('shuffled', true); });
+  wirePilotDrag();
   $('pi-delta').addEventListener('change', function () {
     var v = Number(this.value);
     if (this.value.trim() === '' || !Number.isFinite(v)) { this.value = N(PILOT.delta, 6); return; }

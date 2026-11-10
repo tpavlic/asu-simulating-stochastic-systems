@@ -550,6 +550,23 @@ close(PA.pairedSigmaD(1, 1, -1), 2, 1e-12, 'sigma_d at rho=-1, equal sigmas');
      'repairText keeps a header, a blank line, and each row\'s own separator');
   ok(PA.repairText('3, 1\n1, 2\n2, 3', 'opposite', null) === '1, 3\n2, 2\n3, 1',
      'repairText sorted opposite puts the smallest beside the largest');
+  /* The one-sample t-test and interval behind the plot of a column of
+     differences, against R's t.test. */
+  const tx = [2, 4, 4, 4, 5, 5, 7, 9];
+  const t2 = PA.tTestOne(tx, 0.05, 'two');
+  close(t2.t, 6.614378277661477, 1e-12, 't statistic matches R');
+  close(t2.p, 0.000300269360524705, 1e-9, 'two-sided p matches R');
+  close(t2.lo, 3.212512081763791, 1e-9, 'two-sided 95% CI lower end matches R');
+  close(t2.hi, 6.787487918236210, 1e-9, 'two-sided 95% CI upper end matches R');
+  const t1 = PA.tTestOne(tx, 0.01, 'right');
+  close(t1.p, 0.000150134680262352, 1e-9, 'one-sided (greater) p matches R');
+  close(t1.lo, 2.733761631842700, 1e-9, 'one-sided 99% lower bound matches R');
+  ok(t1.hi === Infinity && t1.reject, 'the greater-than bound is open above, and the test rejects');
+  const t3 = PA.tTestOne(tx.map(v => v - 6), 0.1, 'left');
+  close(t3.p, 0.1137264090298815, 1e-9, 'one-sided (less) p matches R');
+  close(t3.hi, 0.0695819533251408, 1e-9, 'one-sided 90% upper bound matches R');
+  ok(t3.lo === -Infinity && !t3.reject, 'the less-than bound is open below, and the test does not reject');
+
   /* A pilot with rho-hat above the old clamp at |rho| <= 0.95: the bottom
      card's sigma_d from s1, s2, and the full rho-hat must reproduce the
      differences' own s_d, which the clamp would not (163 pairs, not 72). */

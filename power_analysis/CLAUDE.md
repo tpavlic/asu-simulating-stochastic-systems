@@ -10,7 +10,10 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
   power curves, an OC chart tab that carries its own test, α, sidedness, and chart-shaping inputs
   (independent of tabs ① and ②, which share one set of settings), a Paired Samples tab whose
   two cards each carry their own α, alternative, Δ, and target power (a pilot card that runs the
-  paired-t power analysis on pasted pairs or differences, re-pairs the two columns in the box
+  paired-t power analysis on pasted pairs or differences (plotting pairs as a scatter with
+  marginal histograms, and a single column of differences as a dot plot with the `tTestOne`
+  interval at the card's α and alternative, whose Δ line drags Δ by pointer events), re-pairs
+  the two columns in the box
   through `pairingOrder`/`repairText` as permutations of the order as entered, and sends its values
   to tab ① (opened solving for n, since the plan is the output) or to the card below, and a
   correlation card that sweeps ρ; a send keeps the full-precision values beside the boxes so the
