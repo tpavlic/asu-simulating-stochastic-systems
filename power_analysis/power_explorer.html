@@ -189,6 +189,9 @@ a:focus-visible, textarea:focus-visible {
 /* A narrow button wraps its label after the comma, never at the hyphen. */
 .seg .nw { white-space: nowrap; }
 .seg button:hover:not(.on) { background: var(--accent-wash); color: var(--accent); }
+/* A switch with many options wraps onto a second line on a phone rather
+   than pushing the page wider than the screen. */
+.seg.wrap { flex-wrap: wrap; }
 
 /* ── Stat cards ──────────────────────────────────────────────────────── */
 .sg { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap: 8px; }
@@ -359,7 +362,7 @@ footer a:hover { text-decoration: underline; }
     <a class="tab active" href="#explore" data-tab="explore">① Explore a Test</a>
     <a class="tab" href="#curves" data-tab="curves">② Power Curves</a>
     <a class="tab" href="#oc" data-tab="oc">③ OC Chart</a>
-    <a class="tab" href="#paired" data-tab="paired">④ Pilot &amp; Paired Runs</a>
+    <a class="tab" href="#paired" data-tab="paired">④ Paired Samples</a>
     <a class="tab" href="#adv" data-tab="adv">⑤ Beyond Formulas</a>
     <a class="tab" href="#welch" data-tab="welch">⑥ Pooled vs. Welch</a>
   </nav>
@@ -367,7 +370,7 @@ footer a:hover { text-decoration: underline; }
     <option value="explore">① Explore a Test</option>
     <option value="curves">② Power Curves</option>
     <option value="oc">③ OC Chart</option>
-    <option value="paired">④ Pilot &amp; Paired Runs</option>
+    <option value="paired">④ Paired Samples</option>
     <option value="adv">⑤ Beyond Formulas</option>
     <option value="welch">⑥ Pooled vs. Welch</option>
   </select>
@@ -796,75 +799,114 @@ footer a:hover { text-decoration: underline; }
 </section>
 
 <!-- ══════════════════════════════════════════════════════════════════════
-     TAB ④—PILOT & PAIRED RUNS
+     TAB ④: PAIRED SAMPLES
      ══════════════════════════════════════════════════════════════════ -->
 <section id="tab-paired" class="tp">
   <section class="sec">
-    <div class="sec-hd">Plan from pilot data
-      <span class="sec-note">a few real observations replace guessed planning values</span></div>
+    <div class="sec-hd">Increasing power with paired samples
+      <span class="sec-note">each pair is a block, and what its two members share cancels in their difference</span></div>
 
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      A power analysis is typically done to determine the number of samples that an experiment
-      will need. However, the analysis requires information about the variance in each
-      population being sampled, and those variances are often unknown before the experiment
-      has been run. Consequently, a power analysis often depends on a pilot study, a small
-      sample collected first to estimate exactly those variances.</p>
+      A paired design measures both conditions on the same unit: one patient before and after a
+      treatment, two matched individuals, a real system and a simulation driven by the same
+      recorded inputs, or two configurations of a simulated system run on common random numbers.
+      Each pair is a block. Whatever its two members share (the patient's baseline, the inputs,
+      the random numbers) cancels in the difference D = X₁ − X₂, and the paired t-test is the
+      one-sample t-test run on those differences.</p>
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      <strong>An example for parametric testing of means.</strong> Imagine that your goal is
-      to test whether a population's mean deviates significantly from a null hypothesis (a
-      one-sample t-test). For a power analysis, you may have to run a pilot study to sample
-      enough individuals from that population to estimate its standard deviation. Similarly, if you
-      <em>paired</em> individuals from two populations to estimate the mean difference in a
-      response to a shared stimulus, a power analysis would require pilot data on the
-      standard deviation of the paired differences. Pairs like these can come from: matched
-      individuals in a real experiment; a real system's outputs paired against a
-      simulation driven by the same inputs, as in validation; or—the special case explored at
-      the bottom of this page—two configurations of a simulated system sharing common
-      random numbers.</p>
-    <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      The textbox below gathers data for both cases: a single list of
-      numbers, written down a column or across one line, or two columns (comma, tab, or
-      space separated) of <em>paired</em> data that differences will be taken over. Either summary can be sent to tab ① for the power
-      analysis of a one-sample t-test (i.e., for either raw values or the differences between
-      each pair). A two-column summary can also be sent to the bottom of this page for the
-      power analysis of a paired t-test and an investigation of how correlation within pairs
-      can be leveraged for more efficient simulation studies—fewer runs for the same power.</p>
+      The power of a paired test therefore depends on σ<sub>d</sub>, the standard deviation of the
+      differences, rather than on the spread within either column. σ<sub>d</sub> is rarely known
+      before the experiment, and so it is usually estimated from a pilot study, a few pairs
+      collected first. Paste a pilot below, either as two columns (comma, tab, or space
+      separated) with one pair per row or as a single column of differences already taken. This
+      card runs the power analysis of the paired t-test on it. For two columns, it also gives the
+      sample size the same values would need if the two columns were analyzed as independent
+      samples, which shows how much the pairing reduces the number of observations needed.</p>
 
     <div class="duo">
       <div>
         <textarea id="pi-in" class="data-in" spellcheck="false" autocomplete="off"
-          aria-label="Pilot data: one number per line or all on one line, or two columns for a paired pilot"
-          placeholder="Paste pilot observations, one per line, for example&#10;&#10;4.67&#10;3.51&#10;5.01&#10;&#10;A single line of values works too: 4.67, 3.51, 5.01&#10;&#10;Two columns (comma, tab, or space separated) over several lines are read as a paired pilot: X1, X2 per row. A column of 0s and 1s is read as successes for the proportion test."></textarea>
+          aria-label="Pilot data: two columns of paired values, or one column of differences"
+          placeholder="Paste a paired pilot, one pair per row, for example&#10;&#10;14.3, 15.1&#10;27.9, 29.6&#10;19.4, 19.8&#10;&#10;Commas, tabs, or spaces all separate the two values. A single column (or a single line) of numbers is read as the differences X₁ − X₂ themselves."></textarea>
         <div class="parse-msg" id="pi-msg" role="status" aria-live="polite"></div>
         <div class="ctrl-row" id="pi-fix" style="margin-top:8px"></div>
+        <div id="pi-pair-box" style="display:none;margin-top:8px">
+          <div class="ctrl-row" style="margin-bottom:4px">
+            <span class="ctrl-lbl" id="pi-pair-lbl">Pair the values</span>
+            <span class="seg wrap" role="group" aria-labelledby="pi-pair-lbl" id="pi-pair-seg">
+              <button type="button" data-pairing="entered" class="on"><span class="nw">as entered</span></button>
+              <button type="button" data-pairing="shuffled">shuffled</button>
+              <button type="button" data-pairing="together"><span class="nw">sorted together</span></button>
+              <button type="button" data-pairing="opposite"><span class="nw">sorted opposite</span></button>
+            </span>
+            <button class="btn2" id="pi-reshuffle" type="button" disabled>Shuffle again</button>
+          </div>
+          <div class="ctrl-note" id="pi-pair-note">Re-pairing rewrites the order of the values in
+            the box. No value changes, and so s₁, s₂, and the unpaired sample size stay where they
+            are; only ρ̂, s<sub>d</sub>, and the pairs needed move. Sorted together gives the
+            largest ρ̂ these values allow, and sorted opposite gives the most negative. A real
+            analysis uses the pairs as entered, and the other orders show how much the pairing is
+            contributing. Typing in the box makes its new contents the order "as entered".</div>
+        </div>
       </div>
-      <div>
-        <div class="sg" id="pi-cards"><div class="note quiet" style="grid-column:1/-1">Summary
-          cards appear here once a pilot is pasted, each with a button that sends its planning
-          value where it belongs.</div></div>
-        <div class="ctrl-row" id="pi-apply" style="margin-top:10px"></div>
-        <div class="note warn" id="pi-warn" style="display:none"></div>
+      <div class="plot-card">
+        <div class="plot-hd">The pairs, with each column's histogram</div>
+        <svg id="pi-plot" class="plot" viewBox="0 0 460 432" role="img"
+             aria-label="Scatter plot of the second column against the first, with each column's histogram on the margins"></svg>
+        <div class="plot-cap" id="pi-plot-cap"></div>
       </div>
     </div>
+
+    <div class="ctrl-row" style="margin-top:12px">
+      <span class="p-item"><label for="pi-delta">difference to detect Δ</label>
+        <input type="number" id="pi-delta" class="p-in" step="0.1" value="1"></span>
+      <span class="p-item"><label for="pi-target">target power</label>
+        <input type="number" id="pi-target" class="p-in narrow" min="0.05" max="0.999" step="0.01" value="0.8"></span>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="pi-alpha">Significance level α</label>
+        <select id="pi-alpha">
+          <option value="0.005">0.005</option>
+          <option value="0.01">0.01</option>
+          <option value="0.025">0.025</option>
+          <option value="0.05" selected>0.05</option>
+          <option value="0.10">0.10</option>
+        </select>
+      </span>
+      <span class="ctrl-grp">
+        <span class="ctrl-lbl" id="pi-sided-lbl">Alternative</span>
+        <span class="seg" role="group" aria-labelledby="pi-sided-lbl" id="pi-sided-seg">
+          <button type="button" data-sided="two" class="on"><span class="nw">two-sided</span></button>
+          <button type="button" data-sided="one"><span class="nw">one-sided</span></button>
+        </span>
+      </span>
+    </div>
+    <div class="ctrl-note" style="margin-bottom:10px">Set Δ to the smallest mean difference worth
+      detecting, not the one the pilot happened to show. A one-sided test looks for a difference in
+      the direction of Δ's sign. These settings belong to this card alone.</div>
+
+    <div class="sg" id="pi-cards"><div class="note quiet" style="grid-column:1/-1">The power
+      analysis appears here once a pilot is pasted.</div></div>
+    <div class="note warn" id="pi-warn" style="display:none;margin-top:10px"></div>
+    <div class="ctrl-row" id="pi-apply" style="margin-top:10px"></div>
   </section>
+
   <section class="sec">
-    <div class="sec-hd">Comparing two configurations with paired runs
-      <span class="sec-note">why correlated experiments need fewer runs—the statistics behind common random numbers</span></div>
+    <div class="sec-hd">How the correlation within pairs changes the pairs needed
+      <span class="sec-note">common random numbers raise it on purpose</span></div>
 
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      To compare two configurations of a system, run both under the <em>same</em> <em><strong>input</strong></em> conditions and
-      test the paired differences D = X₁ − X₂ with the one-sample t-test of tab ①. Pairing helps
-      through the standard deviation of those differences:</p>
+      The standard deviation of a difference comes from the two standard deviations and the
+      correlation ρ between the members of a pair:</p>
     <div class="mono" style="font-size:.88rem;margin:0 0 10px 1.5em">σ<sub>d</sub> = √(σ₁² + σ₂² − 2ρσ₁σ₂).</div>
     <p style="font-size:.85rem;line-height:1.55;margin-bottom:10px">
-      Positive correlation ρ between the paired observations therefore shrinks σ<sub>d</sub>, and
-      every bit of that shrinkage raises power (or, run the other direction, cuts the runs needed
-      for the same power).
-      In contrast, the method of antithetic variates induces <em>negative</em> correlation between
-      paired runs to reduce the variance of their average. Whereas common random numbers aim to
-      reduce the runs needed to detect a small difference between two systems, antithetic variates
-      aim to reduce the runs needed for a high-precision estimate of a single system's
-      performance, which the card below for the σ of a pair mean tracks.</p>
+      Positive correlation therefore shrinks σ<sub>d</sub>, which raises the power of a given
+      number of pairs and lowers the number of pairs needed for a target power. In a simulation
+      study, common random numbers create that correlation deliberately by driving both
+      configurations with the same random-number streams. The method of antithetic variates instead
+      induces <em>negative</em> correlation between paired runs of one configuration, which
+      shrinks the variance of their average rather than of their difference, and the last card
+      below tracks that σ. Set σ₁, σ₂, and ρ by hand, or send a pilot's values from the card above
+      and then move ρ to see how the pairs needed respond.</p>
 
     <div class="ctrl-row">
       <span class="p-item"><label for="pr-s1">σ₁</label>
@@ -876,22 +918,42 @@ footer a:hover { text-decoration: underline; }
       <span class="p-item"><label for="pr-n">pairs n</label>
         <input type="number" id="pr-n" class="p-in narrow" min="2" step="1" value="15"></span>
       <span class="p-item"><label for="pr-target">target power</label>
-        <input type="number" id="pr-target" class="p-in narrow" min="0.05" max="0.999" step="0.01" value="0.9"></span>
+        <input type="number" id="pr-target" class="p-in narrow" min="0.05" max="0.999" step="0.01" value="0.8"></span>
     </div>
     <div class="ctrl-row">
       <span class="ctrl-grp">
         <label class="ctrl-lbl" for="pr-rho">correlation ρ</label>
-        <input type="range" id="pr-rho" min="-0.95" max="0.95" step="0.05" value="0">
-        <input type="number" id="pr-rho-num" class="p-in narrow" min="-0.99" max="0.99" step="0.05" value="0">
+        <input type="range" id="pr-rho" min="-1" max="1" step="0.01" value="0">
+        <input type="number" id="pr-rho-num" class="p-in narrow" min="-1" max="1" step="0.01" value="0"
+               aria-label="Correlation, exact value">
       </span>
-      <span class="ctrl-note">Uses the α set on tab ①, two-sided.</span>
+      <span class="ctrl-grp">
+        <label class="ctrl-lbl" for="pr-alpha">Significance level α</label>
+        <select id="pr-alpha">
+          <option value="0.005">0.005</option>
+          <option value="0.01">0.01</option>
+          <option value="0.025">0.025</option>
+          <option value="0.05" selected>0.05</option>
+          <option value="0.10">0.10</option>
+        </select>
+      </span>
+      <span class="ctrl-grp">
+        <span class="ctrl-lbl" id="pr-sided-lbl">Alternative</span>
+        <span class="seg" role="group" aria-labelledby="pr-sided-lbl" id="pr-sided-seg">
+          <button type="button" data-sided="two" class="on"><span class="nw">two-sided</span></button>
+          <button type="button" data-sided="one"><span class="nw">one-sided</span></button>
+        </span>
+      </span>
     </div>
+    <div class="ctrl-note" style="margin-bottom:10px">These settings belong to this card alone. The
+      card above can copy a pilot's values into them, and nothing changes them after that except
+      you.</div>
 
     <div class="sg" id="pr-cards" style="margin-top:10px"></div>
 
     <div class="plot-grid" style="margin-top:12px">
       <div class="plot-card">
-        <div class="plot-hd">Power of <span class="lit">n</span> pairs, as <span class="lit">ρ</span> runs from −1 toward 1</div>
+        <div class="plot-hd">Power of <span class="lit">n</span> pairs, as <span class="lit">ρ</span> runs from −1 to 1</div>
         <svg id="pr-plot" class="plot" viewBox="0 0 460 280" role="img"
              aria-label="Power of the paired test against the correlation between paired observations"></svg>
       </div>
@@ -904,14 +966,15 @@ footer a:hover { text-decoration: underline; }
 
     <div class="note" style="margin-top:12px" id="pr-note">
       <strong>ρ &gt; 0 is common random numbers.</strong> Driving both configurations with the same
-      random-number streams makes their outputs rise and fall together, and so the noise cancels in the
-      difference—that is the right half of both plots, where σ<sub>d</sub> collapses and the required n
-      falls. <strong>ρ &lt; 0 is the antithetic idea, pointed at a different target.</strong>
-      Antithetic variates negatively correlate paired runs of <em>one</em> configuration so their
-      <em>average</em> is stable: Var(½(X + X′)) = ¼(σ² + σ² + 2ρσ²) shrinks as ρ goes negative—the
-      same formula with the sign of the cross-term flipped because a sum wants negative
-      correlation exactly where a difference wants positive. Both are variance-reduction techniques
-      in stochastic simulation; this panel is the power analysis that says what they are worth.
+      random-number streams makes their outputs rise and fall together, and so the noise cancels in
+      the difference. That is the right half of both plots, where σ<sub>d</sub> collapses and the
+      required n falls. <strong>ρ &lt; 0 is the antithetic idea, pointed at a different
+      target.</strong> Antithetic variates negatively correlate paired runs of <em>one</em>
+      configuration so that their <em>average</em> is stable: Var(½(X + X′)) = ¼(σ² + σ² + 2ρσ²)
+      shrinks as ρ goes negative. The cross-term's sign is flipped because a sum is steadied by
+      negative correlation exactly where a difference is steadied by positive correlation. Both are
+      variance-reduction techniques in stochastic simulation. The two plots show what ρ does to a
+      comparison of two configurations, and the last card shows what it does to the average of one.
     </div>
   </section>
 
@@ -2905,6 +2968,51 @@ function pairedSummary(a, b) {
   };
 }
 
+/* Which value of each column goes in row k when the two columns are
+   re-paired: row k holds a[ia[k]] beside b[ib[k]]. Every mode is a
+   permutation of the rows as entered, never a composition of earlier
+   re-pairings, and so "entered" always gets the original pairs back.
+   Shuffling moves only the second column. Sorting reorders both, smallest
+   beside smallest ("together") or smallest beside largest ("opposite"),
+   which gives the largest and the most negative correlation that these
+   two sets of values allow. Ties keep their entered order. */
+function pairingOrder(a, b, mode, rng) {
+  var n = Math.min(a.length, b.length), ia = [], ib = [], i;
+  for (i = 0; i < n; i++) { ia.push(i); ib.push(i); }
+  var by = function (v) { return function (p, q) { return v[p] - v[q] || p - q; }; };
+  if (mode === 'shuffled') {
+    for (i = n - 1; i > 0; i--) {
+      var j = Math.floor(rng() * (i + 1)), t = ib[i];
+      ib[i] = ib[j]; ib[j] = t;
+    }
+  } else if (mode === 'together' || mode === 'opposite') {
+    ia.sort(by(a)); ib.sort(by(b));
+    if (mode === 'opposite') ib.reverse();
+  }
+  return { ia: ia, ib: ib };
+}
+
+/* The paste rewritten with its two columns re-paired, so that the box
+   shows the pairs the analysis uses. Each value keeps the text it was
+   typed with and each row keeps its own separator. Lines that are not two
+   numbers (a header, a blank) stay where they were, and the numeric rows
+   are refilled in order. */
+function repairText(text, mode, rng) {
+  var lines = String(text || '').split(/\r\n|\r|\n/);
+  var at = [], ta = [], tb = [], va = [], vb = [], sep = [], i;
+  for (i = 0; i < lines.length; i++) {
+    var line = lines[i].trim(), cells = splitCells(line);
+    if (cells.length !== 2 || !cells.every(function (c) { return Number.isFinite(Number(c)); })) continue;
+    var s = line.indexOf(cells[0]) === 0 && line.slice(-cells[1].length) === cells[1]
+      ? line.slice(cells[0].length, line.length - cells[1].length) : ', ';
+    at.push(i); ta.push(cells[0]); tb.push(cells[1]);
+    va.push(Number(cells[0])); vb.push(Number(cells[1])); sep.push(s);
+  }
+  var ord = pairingOrder(va, vb, mode, rng);
+  for (var k = 0; k < at.length; k++) lines[at[k]] = ta[ord.ia[k]] + sep[k] + tb[ord.ib[k]];
+  return lines.join('\n');
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    11.  FORMATTING AND CSV
    ───────────────────────────────────────────────────────────────────── */
@@ -2950,6 +3058,7 @@ var PA = {
   groupB: groupB, rmsSigma: rmsSigma, welchDf: welchDf, pooledT: pooledT, welchT: welchT,
   parseColumns: parseColumns, pilotColumns: pilotColumns, transposeText: transposeText,
   summarizeCol: summarizeCol, pairedSummary: pairedSummary,
+  pairingOrder: pairingOrder, repairText: repairText,
   num: num, csvEscape: csvEscape, toCsv: toCsv
 };
 /* ===== PA-CORE-END ===== */
@@ -5930,23 +6039,66 @@ function runCwJob() {
     });
 }
 
-/* ── Paired & pilot tab ────────────────────────────────────────────── */
+/* ── Paired-samples tab ────────────────────────────────────────────── */
+/* Both cards on this tab carry their own α, alternative, Δ, and target
+   power, and neither reads tab ①'s settings. A one-sided paired test looks
+   for a difference in the direction of Δ's sign, and so it is the
+   upper-tail test at |Δ|; two-sided power is symmetric in Δ. */
+function pairSide(sided) { return sided === 'one' ? 'right' : 'two'; }
+function sideWord(sided) { return sided === 'one' ? 'one-sided' : 'two-sided'; }
+function pairPower(delta, sd, n, alpha, sided) {
+  if (!(sd > 0)) return 1;
+  return PA.TESTS.t.powerAtEffect(Math.abs(delta) / sd, n, {}, alpha, pairSide(sided));
+}
+function pairN(delta, sd, alpha, sided, target) {
+  if (!(sd > 0)) return 2;
+  if (delta === 0) return NaN;
+  var res = PA.solveNAnalytic(PA.TESTS.t, { mu0: 0, mu1: Math.abs(delta), sigma: sd },
+                              alpha, pairSide(sided), target);
+  return res && res.n ? res.n : NaN;
+}
+/* The same two columns analyzed as two independent samples of equal
+   size: the pooled two-sample t with the average of the two variances,
+   which makes the variance of the difference of the two means
+   (s₁² + s₂²)/n, exactly what pairing with ρ = 0 would give. */
+function unpairedParams(delta, s1, s2) {
+  return { muA: Math.abs(delta), muB: 0, sigma: Math.sqrt(0.5 * (s1 * s1 + s2 * s2)), r: 1 };
+}
+
+/* A send writes each value into its box rounded for display, and a
+   correlation of 0.98457 rounded to 0.9846 would change the pairs needed.
+   The full value is kept beside the box and used for as long as the box
+   still shows what the send wrote, and so the card below reproduces the
+   card above exactly until the reader changes something. */
+var PR_EXACT = {};
+function setExact(id, v, sig) {
+  var s = N(v, sig);
+  $(id).value = s;
+  PR_EXACT[id] = { shown: s, v: v };
+}
+function exactVal(id) {
+  var el = $(id), e = PR_EXACT[id];
+  return e && el.value === e.shown ? e.v : Number(el.value);
+}
+
+var PR = { sided: 'two' };
 function pairedState() {
-  return { s1: Number($('pr-s1').value), s2: Number($('pr-s2').value),
-           rho: Number($('pr-rho-num').value), delta: Number($('pr-delta').value),
+  return { s1: exactVal('pr-s1'), s2: exactVal('pr-s2'),
+           rho: exactVal('pr-rho-num'), delta: Number($('pr-delta').value),
            n: Math.max(2, Math.floor(Number($('pr-n').value))),
-           target: Number($('pr-target').value) };
+           target: Number($('pr-target').value),
+           alpha: Number($('pr-alpha').value), sided: PR.sided };
 }
 function pairedPowerAt(rho, st) {
-  var sd = PA.pairedSigmaD(st.s1, st.s2, rho);
-  if (!(sd > 0)) return 1;
-  return PA.TESTS.t.powerAtEffect(st.delta / sd, st.n, {}, ST.alpha, 'two');
+  return pairPower(st.delta, PA.pairedSigmaD(st.s1, st.s2, rho), st.n, st.alpha, st.sided);
 }
 function pairedNAt(rho, st) {
-  var sd = PA.pairedSigmaD(st.s1, st.s2, rho);
-  if (!(sd > 0)) return 2;
-  var res = PA.solveNAnalytic(PA.TESTS.t, { mu0: 0, mu1: st.delta, sigma: sd }, ST.alpha, 'two', st.target);
-  return res && res.n ? res.n : NaN;
+  return pairN(st.delta, PA.pairedSigmaD(st.s1, st.s2, rho), st.alpha, st.sided, st.target);
+}
+function syncSeg(seg, key, val) {
+  Array.prototype.forEach.call(seg.children, function (b) {
+    b.classList.toggle('on', b.dataset[key] === val);
+  });
 }
 
 function renderPaired() {
@@ -5956,60 +6108,84 @@ function renderPaired() {
   var sd0 = PA.pairedSigmaD(st.s1, st.s2, 0);
   var pw = pairedPowerAt(st.rho, st);
   var nStar = pairedNAt(st.rho, st), n0 = pairedNAt(0, st);
-  var sMean = 0.5 * Math.sqrt(st.s1 * st.s1 + st.s2 * st.s2 + 2 * st.rho * st.s1 * st.s2);
+  var sMean = 0.5 * Math.sqrt(Math.max(0, st.s1 * st.s1 + st.s2 * st.s2 + 2 * st.rho * st.s1 * st.s2));
   var html = '';
   html += card(lit('σ<sub>d</sub>') + ' of a difference', N(sd, 5), 'at ρ = 0 it would be ' + N(sd0, 5));
-  html += card('power of ' + st.n + ' pairs', N(pw, 4), 'paired t, two-sided α = ' + N(ST.alpha, 3));
+  html += card('power of ' + st.n + ' pairs', N(pw, 4),
+               'paired t, ' + sideWord(st.sided) + ', α = ' + N(st.alpha, 3));
   html += card('pairs for power ' + N(st.target, 3), Number.isFinite(nStar) ? String(nStar) : '—',
-               Number.isFinite(n0) ? 'vs ' + n0 + ' pairs at ρ = 0' : '');
+               Number.isFinite(n0) ? 'vs ' + n0 + ' pairs at ρ = 0'
+                                   : (st.delta === 0 ? 'Δ = 0 leaves no difference to detect' : ''));
   html += card(lit('σ') + ' of a pair mean', N(sMean, 5),
                'the mean ½(X + X′), which negative ρ shrinks: the antithetic-variates view');
   $('pr-cards').innerHTML = html;
 
   var gm = plotGeom($('pr-plot'), 460, 280, 0.92, 380);
   var W = gm.W, H = gm.H;
-  var fr = frame(W, H, 44, 10, 12, 38, -1, 1, 0, 1);
+  var fr = frame(W, H, 44, 10, 24, 38, -1, 1, 0, 1);
   var s = drawAxes(fr, [-1, -0.5, 0, 0.5, 1], [0, 0.25, 0.5, 0.75, 1], 'correlation ρ', 'power');
   s += svLine(fr.X(0), fr.mT, fr.X(0), fr.mT + fr.ih, 'stroke:' + C.grid + ';stroke-width:1.5');
   var pts = [];
   for (var i = 0; i <= 120; i++) {
-    var r = -0.99 + 1.98 * i / 120;
+    var r = -1 + 2 * i / 120;
     pts.push([fr.X(r), fr.Y(pairedPowerAt(r, st))]);
   }
   s += '<path d="' + polyPath(pts) + '" fill="none" stroke="' + C.exact + '" stroke-width="2.4"/>';
   s += '<circle cx="' + N(fr.X(st.rho), 6) + '" cy="' + N(fr.Y(pw), 6) + '" r="5" fill="' + C.altc + '"/>';
-  /* along the bottom axis, on the positive-ρ side it refers to, and out
-     of the way of the curve rising toward 1 */
-  s += svTxt(fr.X(0.5), fr.mT + fr.ih - 7, '→ common random numbers →',
+  /* above the frame, over the positive-ρ side it refers to, where no
+     curve can run into it */
+  s += svTxt(fr.X(0.5), fr.mT - 7, '→ common random numbers →',
              FONT + ';font-size:10.5px;fill:' + C.muted, 'middle');
   $('pr-plot').innerHTML = s;
 
-  var nsArr = [], nmax = 0;
-  for (i = 0; i <= 60; i++) {
-    var r2 = -0.95 + 1.9 * i / 60;
+  /* The pairs needed can run from 2 to many thousands across ρ, and a
+     linear axis would flatten everything but the worst case into the
+     floor. Past a thirtyfold range the axis turns logarithmic, which keeps
+     the whole curve on the plot and makes equal ratios equal heights. */
+  var nsArr = [], nmax = 0, nmin = Infinity;
+  for (i = 0; i <= 80; i++) {
+    var r2 = -1 + 2 * i / 80;
     var nv = pairedNAt(r2, st);
     nsArr.push([r2, nv]);
-    if (Number.isFinite(nv) && nv > nmax) nmax = nv;
+    if (Number.isFinite(nv)) { nmax = Math.max(nmax, nv); nmin = Math.min(nmin, nv); }
   }
-  nmax = Math.min(nmax * 1.1 + 2, 4000);
+  var useLog = nmax / nmin > 30, ylo, yhi, yticks, fmtY, yOf;
+  if (useLog) {
+    ylo = Math.floor(Math.log10(nmin)); yhi = Math.ceil(Math.log10(nmax));
+    var steps = yhi - ylo > 3 ? [1] : [1, 2, 5];
+    yticks = [];
+    for (var dec = ylo; dec <= yhi; dec++)
+      steps.forEach(function (m) { var t = Math.log10(m) + dec; if (t <= yhi + 1e-9) yticks.push(t); });
+    fmtY = function (v) { return Math.round(Math.pow(10, v)).toLocaleString('en-US'); };
+    yOf = function (v) { return Math.log10(v); };
+  } else {
+    ylo = 0; yhi = nmax * 1.1 + 2;
+    yticks = niceTicks(0, yhi, 5); fmtY = null;
+    yOf = function (v) { return v; };
+  }
   var gm2 = plotGeom($('pr-nplot'), 460, 280, 0.92, 380);
-  var fr2 = frame(gm2.W, gm2.H, 46, 10, 12, 38, -1, 1, 0, nmax);
-  var s2 = drawAxes(fr2, [-1, -0.5, 0, 0.5, 1], niceTicks(0, nmax, gm2.narrow ? 4 : 5),
-                    'correlation ρ', 'pairs needed');
+  var fr2 = frame(gm2.W, gm2.H, useLog ? 54 : 46, 10, 24, 38, -1, 1, ylo, yhi);
+  var s2 = drawAxes(fr2, [-1, -0.5, 0, 0.5, 1], yticks, 'correlation ρ',
+                    useLog ? 'pairs needed (log scale)' : 'pairs needed', null, fmtY);
   s2 += svLine(fr2.X(0), fr2.mT, fr2.X(0), fr2.mT + fr2.ih, 'stroke:' + C.grid + ';stroke-width:1.5');
-  s2 += svTxt(fr2.X(0.5), fr2.mT + fr2.ih - 7, '→ common random numbers →',
+  s2 += svTxt(fr2.X(0.5), fr2.mT - 7, '→ common random numbers →',
               FONT + ';font-size:10.5px;fill:' + C.muted, 'middle');
   var pts2 = nsArr.filter(function (q) { return Number.isFinite(q[1]); })
-                  .map(function (q) { return [fr2.X(q[0]), fr2.Y(Math.min(q[1], nmax))]; });
-  s2 += '<path d="' + polyPath(pts2) + '" fill="none" stroke="' + C.nullc + '" stroke-width="2.2"/>';
+                  .map(function (q) { return [fr2.X(q[0]), fr2.Y(yOf(q[1]))]; });
+  if (pts2.length > 1)
+    s2 += '<path d="' + polyPath(pts2) + '" fill="none" stroke="' + C.nullc + '" stroke-width="2.2"/>';
   if (Number.isFinite(nStar))
-    s2 += '<circle cx="' + N(fr2.X(st.rho), 6) + '" cy="' + N(fr2.Y(Math.min(nStar, nmax)), 6) +
+    s2 += '<circle cx="' + N(fr2.X(st.rho), 6) + '" cy="' + N(fr2.Y(yOf(nStar)), 6) +
           '" r="5" fill="' + C.altc + '"/>';
   $('pr-nplot').innerHTML = s2;
 }
 
 /* ── Pilot data ────────────────────────────────────────────────────── */
-var PILOT = { cols: null };
+/* orig is the box's contents as the reader last typed them, which every
+   re-pairing permutes and "as entered" restores; seed draws the current
+   shuffle. */
+var PILOT = { cols: null, paired: null, single: null, orig: '', pairing: 'entered', seed: 1,
+              delta: 1, target: 0.8, sided: 'two' };
 /* Differences that cancel in exact arithmetic need not cancel in floating
    point: 1.1 - 1.2 and 1.4 - 1.5 differ in the last bit, leaving an SD of
    1e-16 where the answer is zero. Anything that small next to the data's
@@ -6019,36 +6195,114 @@ function realSpread(sd, center) {
   return sd > 1e-9 * Math.max(1, Math.abs(center || 0));
 }
 
-var PI_PLACEHOLDER = '<div class="note quiet" style="grid-column:1/-1">Summary cards appear ' +
-  'here once a pilot is pasted, each with a button that sends its planning value where it ' +
-  'belongs.</div>';
+var PI_PLACEHOLDER = '<div class="note quiet" style="grid-column:1/-1">The power analysis ' +
+  'appears here once a pilot is pasted.</div>';
+
+/* The pairs as a scatter on equal axes, with the line X₂ = X₁ and each
+   column's histogram on the margins. Both columns share one set of bins
+   and one count scale, and the frame comes from the values alone, which
+   every re-pairing keeps, and so the margins and the frame stay still
+   while the points move. */
+function renderPilotPlot() {
+  var svg = $('pi-plot'), cap = $('pi-plot-cap'), ps = PILOT.paired;
+  var avail = Math.round(svg.parentNode.clientWidth || 0) || 460;
+  var W = Math.max(300, Math.min(avail, 460)), H = Math.round(W * 0.94);
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  var fr, s, i;
+  if (!ps) {
+    fr = frame(W, H, 46, 70, 64, 40, 0, 1, 0, 1);
+    s = drawAxes(fr, [], [], 'X₁ (first column)', 'X₂ (second column)');
+    s += svTxt(fr.mL + fr.iw / 2, fr.mT + fr.ih / 2, PILOT.single ? 'One column has no pairs to plot.' :
+               'Paste two columns to plot the pairs.', FONT + ';font-size:12px;fill:' + C.muted, 'middle');
+    svg.innerHTML = s;
+    cap.textContent = '';
+    return;
+  }
+  var a = PILOT.cols[0].slice(0, ps.n), b = PILOT.cols[1].slice(0, ps.n);
+  var lo = Infinity, hi = -Infinity;
+  for (i = 0; i < ps.n; i++) {
+    lo = Math.min(lo, a[i], b[i]); hi = Math.max(hi, a[i], b[i]);
+  }
+  var span = hi - lo || Math.max(1, Math.abs(hi));
+  var pad = 0.06 * span;
+  fr = frame(W, H, 46, 70, 64, 40, lo - pad, hi + pad, lo - pad, hi + pad);
+  var ticks = niceTicks(lo - pad, hi + pad, 5);
+  s = drawAxes(fr, ticks, ticks, 'X₁ (first column)', 'X₂ (second column)');
+  s += svLine(fr.X(fr.xlo), fr.Y(fr.ylo), fr.X(fr.xhi), fr.Y(fr.yhi),
+              'stroke:' + C.muted + ';stroke-width:1.2;stroke-dasharray:5 4');
+  /* in the empty corner between the two histograms, where the line ends,
+     and so neither the line nor a point can run through it */
+  s += svTxt(fr.mL + fr.iw + 4, fr.mT - 6, 'X₂ = X₁', MONO + ';font-size:10.5px;fill:' + C.muted);
+
+  var k = Math.ceil(Math.log2(ps.n)) + 1, w = span / k;
+  var ca = [], cb = [], cmax = 0;
+  for (i = 0; i < k; i++) { ca.push(0); cb.push(0); }
+  var bin = function (v) { return Math.min(k - 1, Math.max(0, Math.floor((v - lo) / w))); };
+  for (i = 0; i < ps.n; i++) { ca[bin(a[i])]++; cb[bin(b[i])]++; }
+  for (i = 0; i < k; i++) cmax = Math.max(cmax, ca[i], cb[i]);
+  var top0 = 20, top1 = fr.mT - 6, r0 = fr.mL + fr.iw + 6, r1 = W - 20;
+  var bar = 'fill:' + C.nullcF + ';stroke:' + C.nullc + ';stroke-width:1';
+  for (i = 0; i < k; i++) {
+    var e0 = lo + i * w, e1 = e0 + w;
+    if (ca[i]) {
+      var hh = ca[i] / cmax * (top1 - top0);
+      s += '<rect x="' + N(fr.X(e0), 6) + '" y="' + N(top1 - hh, 6) + '" width="' + N(fr.X(e1) - fr.X(e0), 6) +
+           '" height="' + N(hh, 6) + '" style="' + bar + '"/>';
+    }
+    if (cb[i]) {
+      var ww = cb[i] / cmax * (r1 - r0);
+      s += '<rect x="' + N(r0, 6) + '" y="' + N(fr.Y(e1), 6) + '" width="' + N(ww, 6) +
+           '" height="' + N(fr.Y(e0) - fr.Y(e1), 6) + '" style="' + bar + '"/>';
+    }
+  }
+  s += svLine(fr.mL, top1, fr.mL + fr.iw, top1, 'stroke:' + C.grid + ';stroke-width:1.5');
+  s += svLine(r0, fr.mT, r0, fr.mT + fr.ih, 'stroke:' + C.grid + ';stroke-width:1.5');
+  s += svTxt(fr.mL, 13, 'histogram of X₁', FONT + ';font-size:10.5px;fill:' + C.muted);
+  s += '<text x="' + (W - 6) + '" y="' + (fr.mT + fr.ih) + '" transform="rotate(-90 ' + (W - 6) + ' ' +
+       (fr.mT + fr.ih) + ')" style="' + FONT + ';font-size:10.5px;fill:' + C.muted + '">histogram of X₂</text>';
+  for (i = 0; i < ps.n; i++)
+    s += '<circle cx="' + N(fr.X(a[i]), 6) + '" cy="' + N(fr.Y(b[i]), 6) + '" r="4.5" fill="' + C.exact +
+         '" fill-opacity="0.85" stroke="#fff" stroke-width="1"/>';
+  svg.innerHTML = s;
+  var how = { entered: 'as entered', shuffled: 'shuffled', together: 'sorted together',
+              opposite: 'sorted opposite' }[PILOT.pairing];
+  cap.innerHTML = ps.n + ' pairs ' + how + ' · ρ̂ = ' + (Number.isFinite(ps.rho) ? N(ps.rho, 4) : '—') +
+    ' · ' + k + ' bins on each margin · s<sub>d</sub> is small when the points hug a line parallel to the dashed one';
+}
 
 function parsePilot() {
   var res = PA.pilotColumns($('pi-in').value);
-  PILOT.cols = res.cols;
+  PILOT.cols = res.cols; PILOT.paired = null; PILOT.single = null;
   var msg = $('pi-msg'), cards = '', apply = '', warn = '', fix = '';
+  var d = PILOT.delta, alpha = Number($('pi-alpha').value), sided = PILOT.sided, target = PILOT.target;
+  var setting = 'Δ = ' + N(d, 4) + ', α = ' + N(alpha, 3) + ', ' + sideWord(sided);
   msg.classList.remove('bad');
+  $('pi-pair-box').style.display = 'none';
   if (!res.cols.length || res.cols[0].length < 2) {
     msg.textContent = $('pi-in').value.trim() ? 'Need at least two numeric rows.' : '';
     if ($('pi-in').value.trim()) msg.classList.add('bad');
     $('pi-cards').innerHTML = PI_PLACEHOLDER;
     $('pi-apply').innerHTML = ''; $('pi-fix').innerHTML = '';
     $('pi-warn').style.display = 'none';
+    renderPilotPlot();
     return;
   }
+  var sdD, nD, meanD;
   if (res.cols.length >= 2 && res.cols[1].length >= 2) {
     var ps = PA.pairedSummary(res.cols[0], res.cols[1]);
+    PILOT.paired = ps;
     /* More than two columns is usually a transposed paste, and truncating
        it silently would leave the reader with an answer built from data
        they did not think they had given. */
     if (res.cols.length > 2) {
-      msg.textContent = 'Read ' + ps.n + ' paired rows, using the first two columns only—pairs ' +
+      msg.textContent = 'Read ' + ps.n + ' paired rows, using the first two columns only. Pairs ' +
         'are read across each row, not down the columns.';
       fix = '<button class="btn2" id="pi-transpose" type="button">Transpose these data</button>' +
         '<span class="ctrl-note">Turns the ' + res.cols.length + ' columns into ' +
         res.cols.length + ' rows, for a pilot written sideways.</span>';
     } else {
       msg.textContent = 'Read ' + ps.n + ' paired rows (two columns).';
+      if (res.cols[0].length === res.cols[1].length) $('pi-pair-box').style.display = '';
     }
     /* A constant column makes the sample correlation 0/0; showing NaN
        would read as a bug, and the planning buttons would forward a
@@ -6056,99 +6310,165 @@ function parsePilot() {
     var rhoOk = Number.isFinite(ps.rho);
     var vary1 = realSpread(ps.sd1, ps.sd1), vary2 = realSpread(ps.sd2, ps.sd2);
     var varyD = realSpread(ps.sdD, ps.meanD);
-    cards += card('pairs', String(ps.n), '');
-    cards += card(lit('s₁, s₂'), N(ps.sd1, 4) + ', ' + N(ps.sd2, 4), 'per-configuration SDs');
+    sdD = varyD ? ps.sdD : 0; nD = ps.n; meanD = ps.meanD;
+    cards += card('pairs ' + lit('n'), String(ps.n), 'mean difference ' + N(ps.meanD, 4));
+    cards += card(lit('s₁, s₂'), N(ps.sd1, 4) + ', ' + N(ps.sd2, 4), 'each column’s SD');
     cards += card('sample ' + lit('ρ̂'), rhoOk ? N(ps.rho, 4) : '—',
       rhoOk ? 'correlation within pairs'
-            : 'undefined—a constant column leaves no variation to correlate');
-    cards += card(lit('s<sub>d</sub>') + ' of differences', varyD ? N(ps.sdD, 4) : '0',
-      varyD ? 'mean difference ' + N(ps.meanD, 4)
-            : 'every difference is ' + N(ps.meanD, 4) + '—no spread to plan from');
-    if (rhoOk && vary1 && vary2)
-      apply += '<button class="btn2" id="pi-send-paired" type="button" data-tip="Δ is left alone on purpose: plan for the difference you care about, not the one the pilot happened to show." data-tip-press>Send σ₁, σ₂, ρ, and n to the paired analysis below</button>';
-    if (varyD)
-      apply += '<button class="btn2" id="pi-sd-sigma" type="button">Use s<sub>d</sub> as σ for the t test on tab ①</button>';
-    if (!apply)
-      apply = '<span class="ctrl-note">With no variation anywhere in the pilot, there is no σ or ρ to carry into a plan.</span>';
-    PILOT.paired = ps;
+            : 'undefined: a constant column leaves no variation to correlate');
+    cards += card(lit('s<sub>d</sub>'), varyD ? N(ps.sdD, 4) : '0',
+      varyD ? 'SD of the differences; at ρ = 0 it would be ' + N(PA.pairedSigmaD(ps.sd1, ps.sd2, 0), 4)
+            : 'every difference is ' + N(ps.meanD, 4) + ', which leaves no spread to plan from');
   } else {
-    var col = res.cols[0];
-    var sm = PA.summarizeCol(col);
-    PILOT.single = sm; PILOT.paired = null;
-    msg.textContent = 'Read ' + sm.n + ' values (' + (res.fromRow ? 'one row' : 'one column') + ').';
-    cards += card(lit('n') + ' (pilot)', String(sm.n), '');
-    cards += card('mean', N(sm.mean, 5), '');
-    cards += card(lit('s') + ' (sample SD)', N(sm.sd, 5), '');
+    var sm = PA.summarizeCol(res.cols[0]);
+    PILOT.single = sm;
+    msg.textContent = 'Read ' + sm.n + ' values (' + (res.fromRow ? 'one row' : 'one column') +
+      '), taken as the differences X₁ − X₂.';
+    sdD = realSpread(sm.sd, sm.mean) ? sm.sd : 0; nD = sm.n; meanD = sm.mean;
+    cards += card('differences ' + lit('n'), String(sm.n), 'mean ' + N(sm.mean, 5));
+    cards += card(lit('s<sub>d</sub>') + ' (sample SD)', sdD ? N(sm.sd, 5) : '0',
+      sdD ? '' : 'every value is identical, which leaves no spread to plan from');
     if (sm.binary) cards += card(lit('p̂') + ' (share of ones)', N(sm.mean, 4), 'read as successes');
-    var hasSigma = curTest().params.some(function (q) { return q.key === 'sigma'; });
-    if (hasSigma && realSpread(sm.sd, sm.mean)) apply += '<button class="btn2" id="pi-s-sigma" type="button">Use s as the planning σ on tab ① (' +
-      esc(curTest().name) + ')</button>';
-    if (curTest().id === 'var' && realSpread(sm.sd, sm.mean)) apply += '<button class="btn2" id="pi-s2-v1" type="button">Use s² = ' +
-      N(sm.sd * sm.sd, 5) + ' as the true variance σ₁²</button>';
-    if (sm.binary && sm.mean > 0 && sm.mean < 1) apply += '<button class="btn2" id="pi-p-p1" type="button">Use p̂ as the true proportion p₁ (test of a proportion)</button>';
-    if (!apply && !realSpread(sm.sd, sm.mean))
-      apply = '<span class="ctrl-note">Every value is identical—there is no spread to plan from.</span>';
   }
-  /* The pilot warning, with the uncertainty made concrete. */
-  var sm2 = PILOT.paired
-    ? { n: PILOT.paired.n, sd: PILOT.paired.sdD, mean: PILOT.paired.meanD }
-    : PILOT.single;
-  if (sm2 && realSpread(sm2.sd, sm2.mean)) {
-    var nu = sm2.n - 1;
-    var sLo = sm2.sd * Math.sqrt(nu / PA.chi2Quantile(0.975, nu));
-    var sHi = sm2.sd * Math.sqrt(nu / PA.chi2Quantile(0.025, nu));
-    warn = '<strong>A pilot estimate is itself uncertain.</strong> From ' + sm2.n +
-      ' observations, a 95% interval for the true σ runs from ' + N(sLo, 4) + ' to ' + N(sHi, 4) + '.';
-    var tP = ST.P.t;
-    var dNum = Math.abs(tP.mu1 - tP.mu0);
-    if (dNum > 0) {
-      var nLo = PA.solveNAnalytic(PA.TESTS.t, { mu0: 0, mu1: dNum, sigma: sLo }, ST.alpha, 'two', 0.8);
-      var nHi = PA.solveNAnalytic(PA.TESTS.t, { mu0: 0, mu1: dNum, sigma: sHi }, ST.alpha, 'two', 0.8);
-      if (nLo && nLo.n && nHi && nHi.n) {
-        warn += ' Planning a two-sided t test for the difference |μ₁ − μ₀| = ' + N(dNum, 4) +
-          ' at 80% power, that interval alone moves the required n from ' + nLo.n + ' to ' + nHi.n +
-          '. Treat any n computed from a small pilot as a rough figure, and round it up, not down.';
-      }
+
+  /* The paired-t power analysis, from the pilot's own s_d. */
+  if (sdD > 0) {
+    var pw = pairPower(d, sdD, nD, alpha, sided), nStar = pairN(d, sdD, alpha, sided, target);
+    cards += card('pairs needed', Number.isFinite(nStar) ? String(nStar) : '—',
+      Number.isFinite(nStar) ? 'for power ' + N(target, 3) + ', ' + (2 * nStar) + ' observations in all'
+                             : (d === 0 ? 'Δ = 0 leaves no difference to detect' : 'not reachable'));
+    if (PILOT.paired && realSpread(PILOT.paired.sd1, PILOT.paired.sd1) &&
+        realSpread(PILOT.paired.sd2, PILOT.paired.sd2) && d !== 0) {
+      var up = unpairedParams(d, PILOT.paired.sd1, PILOT.paired.sd2);
+      var nU = PA.solveNAnalytic(PA.TESTS.t2, up, alpha, pairSide(sided), target);
+      cards += card('unpaired', nU && nU.n ? String(nU.n) : '—',
+        nU && nU.n ? 'per group, for the same values as two independent samples; ' + (2 * nU.n) +
+                     ' observations in all' : 'not reachable');
     }
+    /* A pilot is too small to be the experiment, and so its own power is
+       a footnote to the plan rather than the answer. */
+    cards += card('power of ' + nD + ' pairs', N(pw, 4), 'the pilot’s own size; paired t, ' + setting);
+  }
+
+  /* The pilot warning, with the uncertainty made concrete. */
+  if (sdD > 0) {
+    var nu = nD - 1;
+    var sLo = sdD * Math.sqrt(nu / PA.chi2Quantile(0.975, nu));
+    var sHi = sdD * Math.sqrt(nu / PA.chi2Quantile(0.025, nu));
+    warn = '<strong>A pilot estimate is itself uncertain.</strong> From ' + nD +
+      ' differences, a 95% interval for the true σ<sub>d</sub> runs from ' + N(sLo, 4) + ' to ' + N(sHi, 4) + '.';
+    var nLo = pairN(d, sLo, alpha, sided, target), nHi = pairN(d, sHi, alpha, sided, target);
+    if (Number.isFinite(nLo) && Number.isFinite(nHi))
+      warn += ' At ' + setting + ', and power ' + N(target, 3) + ', that interval alone moves the pairs ' +
+        'needed from ' + nLo + ' to ' + nHi + '. Treat any n computed from a small pilot as a rough ' +
+        'figure, and round it up rather than down.';
     $('pi-warn').innerHTML = warn;
     $('pi-warn').style.display = '';
   } else {
     $('pi-warn').style.display = 'none';
   }
+
+  /* The sends. Each copies values once, and nothing on the receiving end
+     follows this card afterward. */
+  if (PILOT.paired && Number.isFinite(PILOT.paired.rho) &&
+      realSpread(PILOT.paired.sd1, PILOT.paired.sd1) && realSpread(PILOT.paired.sd2, PILOT.paired.sd2))
+    apply += '<button class="btn2" id="pi-send-paired" type="button" data-tip="Copies s₁, s₂, ρ̂, ' +
+      'and the pilot’s n into the card below, with this card’s Δ, α, alternative, and target power. ' +
+      'The two cards then agree on the pairs needed, until you move ρ." data-tip-press>Send these to ' +
+      'the correlation card below</button>';
+  if (sdD > 0)
+    apply += '<button class="btn2" id="pi-send-t" type="button" data-tip="Opens tab ① on the ' +
+      'one-sample t test, which is the paired t-test run on the differences, with μ₀ = 0, μ₁ = Δ, ' +
+      'σ = s<sub>d</sub>, and this card’s α, alternative, and target power, solving for the n that ' +
+      'reaches that power." ' +
+      'data-tip-press>Explore this paired t-test on tab ①</button>';
+  if (PILOT.single && sdD > 0) {
+    if (curTest().params.some(function (q) { return q.key === 'sigma'; }))
+      apply += '<button class="btn2" id="pi-s-sigma" type="button">Use s as the planning σ on tab ① (' +
+        esc(curTest().name) + ')</button>';
+    apply += '<button class="btn2" id="pi-s2-v1" type="button">Use s² = ' + N(PILOT.single.sd * PILOT.single.sd, 5) +
+      ' as the true variance σ₁² on tab ① (test of a variance)</button>';
+  }
+  if (PILOT.single && PILOT.single.binary && PILOT.single.mean > 0 && PILOT.single.mean < 1)
+    apply += '<button class="btn2" id="pi-p-p1" type="button">Use p̂ as the true proportion p₁ on tab ① ' +
+      '(test of a proportion)</button>';
+  if (!apply)
+    apply = '<span class="ctrl-note">With no variation anywhere in the pilot, there is no σ or ρ to carry into a plan.</span>';
+
   $('pi-cards').innerHTML = cards;
   $('pi-apply').innerHTML = apply;
   $('pi-fix').innerHTML = fix;
+  renderPilotPlot();
   var b;
   if ((b = $('pi-transpose'))) b.addEventListener('click', function () {
     $('pi-in').value = PA.transposeText($('pi-in').value);
-    parsePilot();
+    pilotTyped();
     $('pi-in').focus();
   });
   if ((b = $('pi-send-paired'))) b.addEventListener('click', function () {
-    $('pr-s1').value = N(PILOT.paired.sd1, 5);
-    $('pr-s2').value = N(PILOT.paired.sd2, 5);
-    $('pr-n').value = String(PILOT.paired.n);
-    var r = Math.max(-0.95, Math.min(0.95, PILOT.paired.rho));
-    $('pr-rho').value = r; $('pr-rho-num').value = N(r, 4);
-    /* Everything the pilot measured is now in place, and so the "power of
-       n pairs" card below is the paired-t power analysis for this pilot.
-       Δ is deliberately not overwritten: plan for the difference worth
-       detecting, not the one the pilot happened to show. */
+    var p = PILOT.paired;
+    setExact('pr-s1', p.sd1, 5);
+    setExact('pr-s2', p.sd2, 5);
+    setExact('pr-rho-num', p.rho, 4);
+    $('pr-rho').value = p.rho;
+    $('pr-n').value = String(p.n);
+    $('pr-delta').value = $('pi-delta').value;
+    $('pr-target').value = $('pi-target').value;
+    $('pr-alpha').value = $('pi-alpha').value;
+    PR.sided = PILOT.sided; syncSeg($('pr-sided-seg'), 'sided', PR.sided);
     renderPaired();
-    document.getElementById('pr-cards').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    $('pr-cards').scrollIntoView({ block: 'center', behavior: 'smooth' });
   });
-  if ((b = $('pi-sd-sigma'))) b.addEventListener('click', function () {
-    ST.P.t.sigma = PILOT.paired.sdD; switchTest('t');
+  if ((b = $('pi-send-t'))) b.addEventListener('click', function () {
+    var P = ST.P.t;
+    P.mu0 = 0; P.mu1 = PILOT.delta; P.sigma = sdD;
+    /* The plan is the n, and so tab ① opens solving for it. Its n is set
+       to the planned pairs too, and so switching tab ① to "given n" shows
+       the power of that plan rather than of the pilot. */
+    ST.n.t = Math.min(100000, Math.max(2, Number.isFinite(nStar) ? nStar : nD));
+    ST.mode = 'n';
+    syncSeg($('mode-seg'), 'mode', 'n');
+    $('alpha-sel').value = $('pi-alpha').value; ST.alpha = Number($('pi-alpha').value);
+    ST.sided = PILOT.sided === 'two' ? 'two' : (PILOT.delta < 0 ? 'left' : 'right');
+    ST.target = PILOT.target;
+    $('target-in').value = N(ST.target, 3);
+    $('target-range').value = Math.min(0.99, Math.max(0.05, ST.target));
+    switchTest('t');
+    openTab1();
   });
   if ((b = $('pi-s-sigma'))) b.addEventListener('click', function () {
-    curParams().sigma = PILOT.single.sd; renderParams(); settingsChanged();
+    curParams().sigma = PILOT.single.sd; renderParams(); settingsChanged(); openTab1();
   });
   if ((b = $('pi-s2-v1'))) b.addEventListener('click', function () {
-    ST.P['var'].v1 = PILOT.single.sd * PILOT.single.sd; switchTest('var');
+    ST.P['var'].v1 = PILOT.single.sd * PILOT.single.sd; switchTest('var'); openTab1();
   });
   if ((b = $('pi-p-p1'))) b.addEventListener('click', function () {
-    ST.P.p.p1 = Math.min(1 - 1e-9, Math.max(1e-9, PILOT.single.mean)); switchTest('p');
+    ST.P.p.p1 = Math.min(1 - 1e-9, Math.max(1e-9, PILOT.single.mean)); switchTest('p'); openTab1();
   });
+}
+function openTab1() {
+  showTab('explore');
+  document.querySelector('nav.tabs').scrollIntoView({ block: 'start' });
+}
+
+/* The box changed by hand (or by the transpose button): its contents are
+   the new order "as entered". */
+function pilotTyped() {
+  PILOT.orig = $('pi-in').value;
+  PILOT.pairing = 'entered';
+  syncSeg($('pi-pair-seg'), 'pairing', 'entered');
+  $('pi-reshuffle').disabled = true;
+  parsePilot();
+}
+function setPairing(mode, reshuffle) {
+  if (mode === 'shuffled' && (reshuffle || PILOT.pairing !== 'shuffled'))
+    PILOT.seed = Math.floor(Math.random() * 2147483647);
+  PILOT.pairing = mode;
+  $('pi-in').value = mode === 'entered' ? PILOT.orig
+                   : PA.repairText(PILOT.orig, mode, PA.MRG32k3a(PILOT.seed));
+  syncSeg($('pi-pair-seg'), 'pairing', mode);
+  $('pi-reshuffle').disabled = mode !== 'shuffled';
+  parsePilot();
 }
 
 /* ── Advanced tab: gamma-regression demo ───────────────────────────── */
@@ -6285,7 +6605,9 @@ function renderVisibleTab() {
   if (curTab === 'adv' && geomStale($('ad-trace'), 940)) redrawAdTrace();
   if (curTab === 'curves' && TAB_DIRTY.curves) { renderCurves(); TAB_DIRTY.curves = false; }
   if (curTab === 'oc' && TAB_DIRTY.oc) { renderOC(); TAB_DIRTY.oc = false; }
-  if (curTab === 'paired') renderPaired();
+  /* The pilot card is redrawn too: its scatter may have been sized while
+     hidden, and one of its buttons names tab ①'s current test. */
+  if (curTab === 'paired') { parsePilot(); renderPaired(); }
   if (curTab === 'welch' && geomStale($('cw-data-plot'), 940)) renderCwDataPlot();
   if (curTab === 'welch' && geomStale($('cw-stat-pool'), 460)) renderCwStatPlots();
   if (curTab === 'welch' && geomStale($('cw-plot-a'), 460)) renderCwPlots();
@@ -6478,20 +6800,50 @@ document.addEventListener('DOMContentLoaded', function () {
   });
   wireOCPointer();
 
-  ['pr-s1', 'pr-s2', 'pr-delta', 'pr-n', 'pr-target'].forEach(function (id) {
+  ['pr-s1', 'pr-s2', 'pr-delta', 'pr-n', 'pr-target', 'pr-alpha'].forEach(function (id) {
     $(id).addEventListener('change', renderPaired);
   });
   $('pr-rho').addEventListener('input', function () {
     $('pr-rho-num').value = this.value; renderPaired();
   });
   $('pr-rho-num').addEventListener('change', function () {
-    var v = Math.max(-0.99, Math.min(0.99, Number(this.value) || 0));
-    this.value = N(v, 4); $('pr-rho').value = Math.max(-0.95, Math.min(0.95, v));
+    var e = PR_EXACT['pr-rho-num'];
+    if (!(e && this.value === e.shown)) {
+      var v = Math.max(-1, Math.min(1, Number(this.value) || 0));
+      this.value = N(v, 4); $('pr-rho').value = v;
+    }
     renderPaired();
+  });
+  Array.prototype.forEach.call($('pr-sided-seg').children, function (b) {
+    b.addEventListener('click', function () {
+      PR.sided = b.dataset.sided; syncSeg($('pr-sided-seg'), 'sided', PR.sided);
+      renderPaired();
+    });
   });
   var piTimer = null;
   $('pi-in').addEventListener('input', function () {
-    clearTimeout(piTimer); piTimer = setTimeout(parsePilot, 250);
+    clearTimeout(piTimer); piTimer = setTimeout(pilotTyped, 250);
+  });
+  Array.prototype.forEach.call($('pi-pair-seg').children, function (b) {
+    b.addEventListener('click', function () { setPairing(b.dataset.pairing, false); });
+  });
+  $('pi-reshuffle').addEventListener('click', function () { setPairing('shuffled', true); });
+  $('pi-delta').addEventListener('change', function () {
+    var v = Number(this.value);
+    if (this.value.trim() === '' || !Number.isFinite(v)) { this.value = N(PILOT.delta, 6); return; }
+    PILOT.delta = v; parsePilot();
+  });
+  $('pi-target').addEventListener('change', function () {
+    var v = Number(this.value);
+    if (!(v > 0.049 && v < 0.9995)) { this.value = N(PILOT.target, 3); return; }
+    PILOT.target = v; parsePilot();
+  });
+  $('pi-alpha').addEventListener('change', parsePilot);
+  Array.prototype.forEach.call($('pi-sided-seg').children, function (b) {
+    b.addEventListener('click', function () {
+      PILOT.sided = b.dataset.sided; syncSeg($('pi-sided-seg'), 'sided', PILOT.sided);
+      parsePilot();
+    });
   });
   $('ad-run').addEventListener('click', runLogit);
 

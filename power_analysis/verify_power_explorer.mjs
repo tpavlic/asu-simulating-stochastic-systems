@@ -520,6 +520,45 @@ close(PA.pairedSigmaD(1, 1, -1), 2, 1e-12, 'sigma_d at rho=-1, equal sigmas');
   ok(rowSummary.n === 8 && Math.abs(rowSummary.mean - 5) < 1e-12 &&
      Math.abs(rowSummary.sd - Math.sqrt(32 / 7)) < 1e-12,
      'summarizeCol on a row-entered list: n = 8, mean 5, s = sqrt(32/7)');
+
+  /* Re-pairing: every mode keeps both sets of values, sorting reaches the
+     two extreme correlations, and the box text keeps each value as typed. */
+  const pa = [31.4, 18.2, 44.7, 25.9, 38.1, 12.6], pb = [30.1, 20.9, 45.1, 30.8, 37.6, 16.8];
+  const pilot = '31.4,30.1\n18.2,20.9\n44.7,45.1\n25.9,30.8\n38.1,37.6\n12.6,16.8';
+  const sorted = (v) => v.slice().sort((x, y) => x - y).join();
+  const rhoOf = (mode, seed) => {
+    const o = PA.pairingOrder(pa, pb, mode, PA.MRG32k3a(seed || 1));
+    return PA.pairedSummary(o.ia.map(i => pa[i]), o.ib.map(i => pb[i])).rho;
+  };
+  for (const mode of ['entered', 'shuffled', 'together', 'opposite']) {
+    const o = PA.pairingOrder(pa, pb, mode, PA.MRG32k3a(7));
+    ok(sorted(o.ia.map(i => pa[i])) === sorted(pa) && sorted(o.ib.map(i => pb[i])) === sorted(pb),
+       `pairingOrder (${mode}) is a permutation of each column`);
+  }
+  const r0 = rhoOf('entered'), rT = rhoOf('together'), rO = rhoOf('opposite');
+  ok(Math.abs(r0 - PA.pairedSummary(pa, pb).rho) < 1e-15, 'pairingOrder: "entered" is the identity');
+  let shufOk = true;
+  for (let s = 1; s <= 200; s++) { const r = rhoOf('shuffled', s); if (r > rT + 1e-12 || r < rO - 1e-12) shufOk = false; }
+  ok(rT >= r0 && rO <= r0 && shufOk,
+     `sorted together and sorted opposite bound every pairing (${rO.toFixed(4)} to ${rT.toFixed(4)})`);
+  const shufA = PA.pairingOrder(pa, pb, 'shuffled', PA.MRG32k3a(3)).ia;
+  ok(shufA.every((v, i) => v === i), 'pairingOrder: shuffling leaves the first column in place');
+  const tog = PA.repairText(pilot, 'together', PA.MRG32k3a(1));
+  ok(tog === '12.6,16.8\n18.2,20.9\n25.9,30.1\n31.4,30.8\n38.1,37.6\n44.7,45.1',
+     'repairText sorts both columns together, values as typed');
+  ok(PA.repairText('x, y\n1.50\t9\n\n2.25 4', 'opposite', null) === 'x, y\n1.50\t9\n\n2.25 4',
+     'repairText keeps a header, a blank line, and each row\'s own separator');
+  ok(PA.repairText('3, 1\n1, 2\n2, 3', 'opposite', null) === '1, 3\n2, 2\n3, 1',
+     'repairText sorted opposite puts the smallest beside the largest');
+  /* A pilot with rho-hat above the old clamp at |rho| <= 0.95: the bottom
+     card's sigma_d from s1, s2, and the full rho-hat must reproduce the
+     differences' own s_d, which the clamp would not (163 pairs, not 72). */
+  const pp = PA.pairedSummary(pa, pb);
+  close(PA.pairedSigmaD(pp.sd1, pp.sd2, pp.rho), pp.sdD, 1e-12,
+        'sigma_d from s1, s2, rho-hat equals the s_d of the differences');
+  const nAt = (sd) => PA.solveNAnalytic(PA.TESTS.t, { mu0: 0, mu1: 1, sigma: sd }, 0.05, 'two', 0.9).n;
+  ok(nAt(PA.pairedSigmaD(pp.sd1, pp.sd2, pp.rho)) === nAt(pp.sdD) && nAt(pp.sdD) === 72,
+     `pilot with rho-hat ${pp.rho.toFixed(4)}: both routes need 72 pairs at delta = 1, power 0.9`);
 }
 {
   /* A runaway noncentrality must terminate. The Poisson mixtures walk
