@@ -2305,6 +2305,76 @@ section('16e. models cut off at zero');
        `a mirrored gamma, which always reaches below 0, is cut there (cut ${m.ok ? (100 * m.cutMass).toFixed(2) : '-'}%)`);
   }
 
+  /* The exports. Arena, Simio, and AnyLogic draw the Weibull and the
+     log-logistic exactly from one uniform; AnyLogic's line is JavaScript as
+     written once uniform is defined, and so it is run here. Every other
+     family's line in those tools is the uncut model with a note on drawing
+     again. R, MATLAB, and Python draw every family exactly. */
+  {
+    const wb = draw('weibull', [3, 1.4], -1.5, 200), lf = draw('gamma', [3, 1.5], 0, 200).map(v => Math.max(0.001, 12 - v));
+    const exactCases = [['Weibull', IA.fitDist(D.weibull, wb, true, false, null, null, false, cutOpts)],
+                        ['log-logistic', IA.fitDist(D.loglogistic, wb, true, false, null, null, false, cutOpts)],
+                        ['mirrored Weibull', IA.fitDist(D.weibull, lf, true, false, null, null, true, cutOpts)],
+                        ['mirrored log-logistic', IA.fitDist(D.loglogistic, lf, true, false, null, null, true, cutOpts)]];
+    for (const [what, f] of exactCases) {
+      if (!IA.isCut(f)) { ok(false, `${what}: expected a cut fit for the export check`); continue; }
+      const ex = IA.expressions(f), F = IA.fitCdf(f), ur = IA.MRG32k3a(16800);
+      const fn = new Function('uniform', 'return ' + ex.anylogic), y = [];
+      for (let i = 0; i < 40000; i++) y.push(fn(() => ur()));
+      y.sort((a, b) => a - b);
+      const ks = IA.ksStat(y, F, () => 0).D;
+      ok(ex.exact.arena && ex.exact.simio && ex.exact.anylogic && y[0] >= 0 && ks < 1.63 / Math.sqrt(40000) &&
+         /UNIF\(0, 1\)/.test(ex.arena) && (ex.arena.match(/UNIF/g) || []).length === 1,
+         `${what} cut at 0: one exact expression with one uniform in each tool; AnyLogic's 40000 draws match the cut CDF (D = ${ks.toFixed(4)})`);
+    }
+    const nf = IA.fitDist(D.normal, wb, false, false, null, null, false, cutOpts), ne = IA.expressions(nf);
+    ok(!ne.exact.arena && ne.arena === IA.expressions(Object.assign({}, nf, { cut: null })).arena &&
+       /Decide module/.test(ne.notes.arena) && /draw again/.test(ne.notes.simio) && /while \(v < 0\)/.test(ne.notes.anylogic),
+       'a cut normal\'s Arena, Simio, and AnyLogic lines are the uncut model, each with a note on drawing again');
+    ok(/runif\(n\)/.test(ne.r) && /qnorm/.test(ne.r) && /norminv/.test(ne.matlab) && /stats\.norm\.ppf/.test(ne.python) &&
+       ne.exact.r && ne.exact.matlab && ne.exact.python,
+       'and its R, MATLAB, and Python lines invert the cut model');
+    ok(IA.nortaQuantile(nf, 'arena', 'Z', 'U').expr === null &&
+       /inverse of the normal CDF/.test(IA.nortaQuantile(nf, 'arena', 'Z', 'U').why) &&
+       IA.nortaQuantile(exactCases[0][1], 'arena', 'Z', 'U').expr !== null,
+       'NORTA gives a cut Weibull an Arena block and refuses a cut normal one, for want of the normal quantile');
+    for (const [what, f] of [['normal', nf], ['mirrored Weibull', exactCases[2][1]]]) {
+      const ex = IA.expressions(f), Q = IA.fitQuantile(f), qs = [0.05, 0.25, 0.5, 0.75, 0.95];
+      const want = qs.map(q => Q(q)), spread = want[3] - want[1];
+      for (const [lang, cmd, args, ext, code] of [
+        ['R', 'Rscript', ['--vanilla'], 'R', 'set.seed(1); n <- 200000\nx <- ' + ex.r + '\ncat(min(x), quantile(x, c(' + qs.join(',') + '), names = FALSE))\n'],
+        ['Python', 'python3', ['-I'], 'py', 'import numpy as np\nfrom scipy import stats\nnp.random.seed(1); n = 200000\nx = ' + ex.python +
+          '\nprint(np.min(x), *np.quantile(x, [' + qs.join(',') + ']))\n']]) {
+        const res = runScript(cmd, args, code, ext);
+        if (!res) { console.log(`  (skipped: ${lang} is not installed)`); continue; }
+        const v = res.out.trim().split(/\s+/).map(Number);
+        const err = v.length === 6 ? Math.max(...want.map((w, i) => Math.abs(v[i + 1] - w))) / spread : NaN;
+        ok(res.status === 0 && v[0] >= 0 && err < 0.02,
+           `${lang}'s line for the cut ${what}: 200000 draws, none below 0, quantiles within ${(100 * err).toFixed(2)}% of the spread`,
+           res.out.slice(-300));
+      }
+    }
+    /* The scripts maximize the cut likelihood from the page's estimates. */
+    const zx = gx.map(v => v + 0.3); zx[0] = 0;
+    const rx = gx.map(v => Math.round(v)), rrec = IA.recordingRec(IA.summarize(rx), 'nearest');
+    const scriptCases = [['cut normal', nf, wb], ['cut mirrored Weibull', exactCases[2][1], lf],
+                         ['cut normal fitted to ranges', IA.fitDist(D.normal, rx, false, false, null, null, false, { ...cutOpts, rec: rrec }), rx],
+                         ['gamma cut for an exact 0', IA.fitDist(D.gamma, zx, true, false, null, null, false, floor), zx]];
+    for (const [what, f, data] of scriptCases) {
+      if (!IA.isCut(f)) { ok(false, `${what}: expected a cut fit for the script check`); continue; }
+      const sp = IA.reproScripts(f, data, 7, 20);
+      ok(sp.r.includes('cut off at zero') && sp.python.includes('cut off at zero') && sp.matlab.includes('cut off at zero'),
+         `${what}: the scripts in all three languages say the model is cut off at zero`);
+      for (const [lang, cmd, args, ext, code] of [['R', 'Rscript', ['--vanilla'], 'R', sp.r], ['Python', 'python3', ['-I'], 'py', sp.python]]) {
+        const res = runScript(cmd, args, code, ext);
+        if (!res) { console.log(`  (skipped: ${lang} is not installed)`); continue; }
+        const agree = (res.out.match(/\bagrees\b/g) || []).length, differ = (res.out.match(/\bDIFFERS\b/g) || []).length;
+        ok(res.status === 0 && differ === 0 && agree >= 4,
+           `${lang} script for the ${what}: ${agree} values agree with the page, ${differ} differ`, res.out.slice(-600));
+      }
+    }
+  }
+
   /* The bootstrap's calibration under a true null (jobs cutCalib). */
   {
     const R = CALIB_R, se = Math.sqrt(0.05 * 0.95 / R), band = 4 * se + 0.01;

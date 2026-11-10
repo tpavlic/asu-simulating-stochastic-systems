@@ -5470,12 +5470,28 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
     return base.ok && baseIn ? base : { ok: false, msg: 'No cut-off model fits these values.' };
   var keep = keepOf(res.p, res.g);
   var nFree = held ? np - fixed.filter(function (v) { return v !== null && v !== undefined; }).length : dist.np;
+  /* A Johnson member that runs off is named by its limit by the test in its
+     own fit, here against the cut normal and the cut shifted lognormal, the
+     limits of the cut family. */
+  var edge = null;
+  if (dist.key === 'johnsonSU' || dist.key === 'johnsonSB') {
+    var q = res.p, far = JOHNSON_EDGE * range;
+    var off = dist.key === 'johnsonSU' ? q[3] > far || Math.abs(q[2] - s.med) > far
+                                       : s.min - q[2] > far || q[2] + q[3] - s.max > far;
+    if (off) {
+      var lim = function (key, sh) {
+        var f = fitDist(DISTS[key], x, sh, fast, null, null, false, opts);
+        return f.ok ? f.ll : -Infinity;
+      };
+      edge = Math.abs(res.ll - lim('lognormal', true)) < Math.abs(res.ll - lim('normal', false)) ? 'lognormal' : 'normal';
+    } else if (dist.key === 'johnsonSU' && Math.abs(q[0]) / q[1] > 2.5) edge = 'lognormal';
+  }
   return { ok: true, dist: dist, p: res.p, shift: shiftOn ? res.g : 0, reflect: reflect || undefined,
            k: nFree + (shiftFree ? 1 : 0), ll: res.ll,
            atBound: false, degenerate: false, shiftHeld: shiftHeld,
            floor0: !reflect, floorBound: false, cut0: true, cut: 0, cutMass: 1 - keep,
            cutLimit: 1 - keep > cap - 1e-3 * (1 - cap) - 1e-6, rec: rec,
-           edge: null, orderStat: dist.key === 'beta' ? [3] : null,
+           edge: edge, orderStat: dist.key === 'beta' ? [3] : null,
            fixed: held ? fixed.slice() : null, allHeld: held && nFree === 0 && !shiftFree };
 }
 
@@ -6780,7 +6796,81 @@ function discNote(name, t, tool, native) {
     folded + '. That makes this an approximation; ' + listOf(native, 'and') + ' generate the ' + name + ' itself.';
 }
 
+/* One draw from a model cut off at zero. R, MATLAB, and Python draw it
+   exactly by inverse transform, a uniform mapped into the part of the model
+   kept (NORTA's quantiles, which take any U). Arena, Simio, and AnyLogic
+   draw the Weibull and the log-logistic exactly too, in one expression with
+   one uniform. Shifted by gamma < 0 and cut at 0, the family's own variable
+   Y is kept at or above y0 = -gamma, and such a Y is
+   beta ((y0/beta)^alpha - ln U)^(1/alpha) for the Weibull and
+   beta ((1 + o0)/U - 1)^(1/alpha), with o0 = (y0/beta)^alpha, for the
+   log-logistic; mirrored, Y is kept at or below c, and such a Y is
+   beta (-ln(1 - F(c) U))^(1/alpha) and beta ((1 + 1/oc)/U - 1)^(-1/alpha),
+   with oc = (c/beta)^alpha. Every other
+   family's line in those three tools is the model before the cut, with a
+   note on drawing again until the value is at or above 0. The Simio lines
+   use only Random.Uniform, Math.Log, Math.Max, and ^, all documented, but
+   have not been run in Simio. Every exact line is held at or above 0 by a
+   maximum, which changes only the draws that rounding of the share kept
+   puts a hair below 0. */
+var CUT_UNIF = { arena: 'UNIF(0, 1)', simio: 'Random.Uniform(0, 1)', anylogic: 'uniform(0, 1)' };
+function cutExpressions(fit, sample) {
+  var whole = Object.assign({}, fit, { cut: null }), inner = expressions(whole, sample);
+  var d = fit.dist, p = fit.p, k = d.key, m = fit.cutMass, K = 1 - m, g = fit.shift || 0, N = num;
+  var pct = N(100 * m, 3), avg = N(1 / K, 3), low = distLower(d);
+  var out = { arena: null, simio: null, anylogic: null, r: null, matlab: null, python: null, notes: {}, exact: {} };
+  var wrap = { r: function (e) { return 'local({ u <- runif(n); ' + e + ' })'; },
+               matlab: function (e) { return 'feval(@(u) ' + e + ', rand(n, 1))'; },
+               python: function (e) { return '(lambda u: ' + e + ')(np.random.rand(n))'; } };
+  ['r', 'matlab', 'python'].forEach(function (t) {
+    var q = nortaVecQuantile(fit, t, 'z', 'u');
+    out[t] = wrap[t](q.expr);
+    out.exact[t] = true;
+    out.notes[t] = 'Inverse transform of the cut model: each uniform u is mapped into the part of the ' + low +
+      ' at or above 0, its top ' + N(100 * K, 3) + '%, and so no draw falls below 0. The maximum with 0 ' +
+      'only absorbs rounding; it does not pile draws up at 0.';
+  });
+  ['arena', 'simio', 'anylogic'].forEach(function (t) {
+    var S = NORTA_SYN[t], U = CUT_UNIF[t], e = null;
+    if (k === 'weibull' || k === 'loglogistic') {
+      var sc = k === 'weibull' ? p[0] : p[1], sh = k === 'weibull' ? p[1] : p[0];
+      if (fit.reflect) {
+        e = k === 'weibull'
+          ? N(g) + ' - ' + N(sc) + '*' + S.pow('0 - ' + S.ln + '(1 - ' + plainProb(K) + '*' + U + ')', N(1 / sh))
+          : N(g) + ' - ' + N(sc) + '*' + S.pow(N(1 + 1 / Math.pow(g / sc, sh)) + '/' + U + ' - 1', '0 - ' + N(1 / sh));
+      } else {
+        var o0 = Math.pow(-g / sc, sh);
+        e = (k === 'weibull'
+          ? N(sc) + '*' + S.pow(plainProb(o0) + ' - ' + S.ln + '(' + U + ')', N(1 / sh))
+          : N(sc) + '*' + S.pow(N(1 + o0, 8) + '/' + U + ' - 1', N(1 / sh))) + ' - ' + N(-g);
+      }
+    }
+    if (e) {
+      out[t] = clipAtZero(t, e); out.exact[t] = true;
+      out.notes[t] = 'The ' + low + ' cut off at zero, drawn exactly from one uniform mapped into the part ' +
+        'of the model at or above 0, and so no draw falls below 0. The maximum with 0 only absorbs rounding; ' +
+        'it does not pile draws up at 0.';
+      return;
+    }
+    out[t] = inner[t]; out.exact[t] = false;
+    var tool = { arena: 'Arena', simio: 'Simio', anylogic: 'AnyLogic' }[t];
+    var head = 'No single ' + tool + ' expression draws this cut model. The line is the ' + low +
+      ' before the cut, which falls below 0 in ' + pct + '% of draws. ';
+    var how = t === 'arena'
+      ? 'Assign it to an attribute, and have a Decide module send the entity back to that Assign while the ' +
+        'attribute is below 0'
+      : t === 'simio'
+        ? 'Draw it into a state variable in a process, and draw again while the value is below 0'
+        : 'Call it from a function that draws again while the value is below 0, for example ' +
+          'do { v = <the line>; } while (v < 0); return v;';
+    out.notes[t] = head + how + '; that takes ' + avg + ' draws on average. Used alone, the line keeps the ' +
+      pct + '% below zero.';
+  });
+  return out;
+}
+
 function expressions(fit, sample) {
+  if (isCut(fit)) return cutExpressions(fit, sample);
   /* A mirrored fit is c minus a draw from the unmirrored model, and every
      tool can write that as a subtraction around the expression it already
      has. scipy's frozen distributions have no general mirror, and so the
@@ -7426,89 +7516,138 @@ function dataLiteral(x, style) {
    likelihood itself, maximizes it by Nelder-Mead from this page's
    estimates, and prints every number beside the page's with "agrees" or
    "DIFFERS". Each family needs its CDF from 0 (or on its own support) and
-   its quantile, in each language, with the page's parameters as th; the
-   shift, or a mirror image's c, is applied around them. */
+   its quantile, in each language, with the page's parameters as th, and a
+   family that can be cut off at zero also its density, for a cut fit to
+   values recorded exactly; the shift, or a mirror image's c, is applied
+   around them. */
 var RANGE_FAM = {
   expo: { r: ['pexp(z, 1 / th[1])', 'qexp(u, 1 / th[1])'],
           m: ['expcdf(z, th(1))', 'expinv(u, th(1))'], py: 'stats.expon(scale=th[0])' },
-  gamma: { r: ['pgamma(z, shape = th[1], scale = th[2])', 'qgamma(u, shape = th[1], scale = th[2])'],
-           m: ['gamcdf(z, th(1), th(2))', 'gaminv(u, th(1), th(2))'], py: 'stats.gamma(th[0], scale=th[1])' },
-  weibull: { r: ['pweibull(z, shape = th[2], scale = th[1])', 'qweibull(u, shape = th[2], scale = th[1])'],
-             m: ['wblcdf(z, th(1), th(2))', 'wblinv(u, th(1), th(2))'], py: 'stats.weibull_min(th[1], scale=th[0])' },
-  lognormal: { r: ['plnorm(z, th[1], th[2])', 'qlnorm(u, th[1], th[2])'],
-               m: ['logncdf(z, th(1), th(2))', 'logninv(u, th(1), th(2))'], py: 'stats.lognorm(th[1], scale=np.exp(th[0]))' },
-  loglogistic: { r: ['plogis(log(pmax(z, 0)), log(th[2]), 1 / th[1])', 'th[2] * (u / (1 - u))^(1 / th[1])'],
-                 m: ['1 ./ (1 + (max(z, 0) / th(2)) .^ (-th(1)))', 'th(2) * (u ./ (1 - u)) .^ (1 / th(1))'],
+  gamma: { r: ['pgamma(z, shape = th[1], scale = th[2])', 'qgamma(u, shape = th[1], scale = th[2])',
+        'dgamma(z, shape = th[1], scale = th[2])'],
+           m: ['gamcdf(z, th(1), th(2))', 'gaminv(u, th(1), th(2))',
+        'gampdf(z, th(1), th(2))'], py: 'stats.gamma(th[0], scale=th[1])' },
+  weibull: { r: ['pweibull(z, shape = th[2], scale = th[1])', 'qweibull(u, shape = th[2], scale = th[1])',
+        'dweibull(z, shape = th[2], scale = th[1])'],
+             m: ['wblcdf(z, th(1), th(2))', 'wblinv(u, th(1), th(2))',
+        'wblpdf(z, th(1), th(2))'], py: 'stats.weibull_min(th[1], scale=th[0])' },
+  lognormal: { r: ['plnorm(z, th[1], th[2])', 'qlnorm(u, th[1], th[2])',
+        'dlnorm(z, th[1], th[2])'],
+               m: ['logncdf(z, th(1), th(2))', 'logninv(u, th(1), th(2))',
+        'lognpdf(z, th(1), th(2))'], py: 'stats.lognorm(th[1], scale=np.exp(th[0]))' },
+  loglogistic: { r: ['plogis(log(pmax(z, 0)), log(th[2]), 1 / th[1])', 'th[2] * (u / (1 - u))^(1 / th[1])',
+        'ifelse(z > 0, th[1] / th[2] * (pmax(z, 1e-300) / th[2])^(th[1] - 1) / (1 + (pmax(z, 1e-300) / th[2])^th[1])^2, 0)'],
+                 m: ['1 ./ (1 + (max(z, 0) / th(2)) .^ (-th(1)))', 'th(2) * (u ./ (1 - u)) .^ (1 / th(1))',
+        '(z > 0) .* th(1) / th(2) .* (max(z, 1e-300) / th(2)) .^ (th(1) - 1) ./ (1 + (max(z, 1e-300) / th(2)) .^ th(1)) .^ 2'],
                  py: 'stats.fisk(th[0], scale=th[1])' },
-  pearson5: { r: ['pgamma(th[2] / pmax(z, 0), th[1], lower.tail = FALSE)', 'th[2] / qgamma(1 - u, th[1])'],
-              m: ["gammainc(th(2) ./ max(z, 0), th(1), 'upper')", 'th(2) ./ gaminv(1 - u, th(1), 1)'],
+  pearson5: { r: ['pgamma(th[2] / pmax(z, 0), th[1], lower.tail = FALSE)', 'th[2] / qgamma(1 - u, th[1])',
+        'ifelse(z > 0, dgamma(th[2] / pmax(z, 1e-300), th[1]) * th[2] / pmax(z, 1e-300)^2, 0)'],
+              m: ["gammainc(th(2) ./ max(z, 0), th(1), 'upper')", 'th(2) ./ gaminv(1 - u, th(1), 1)',
+        '(z > 0) .* gampdf(th(2) ./ max(z, 1e-300), th(1), 1) .* th(2) ./ max(z, 1e-300) .^ 2'],
               py: 'stats.invgamma(th[0], scale=th[1])' },
   pearson6: { r: ['pbeta(pmax(z, 0) / (pmax(z, 0) + th[3]), th[1], th[2])', 'th[3] / (1 / qbeta(u, th[1], th[2]) - 1)'],
               m: ['betainc(max(z, 0) ./ (max(z, 0) + th(3)), th(1), th(2))', 'th(3) ./ (1 ./ betainv(u, th(1), th(2)) - 1)'],
               py: 'stats.betaprime(th[0], th[1], scale=th[2])' },
-  normal: { r: ['pnorm(z, th[1], th[2])', 'qnorm(u, th[1], th[2])'],
-            m: ['normcdf(z, th(1), th(2))', 'norminv(u, th(1), th(2))'], py: 'stats.norm(th[0], th[1])' },
+  normal: { r: ['pnorm(z, th[1], th[2])', 'qnorm(u, th[1], th[2])',
+        'dnorm(z, th[1], th[2])'],
+            m: ['normcdf(z, th(1), th(2))', 'norminv(u, th(1), th(2))',
+        'normpdf(z, th(1), th(2))'], py: 'stats.norm(th[0], th[1])' },
   uniform: { r: ['punif(z, th[1], th[2])', 'qunif(u, th[1], th[2])'],
              m: ['unifcdf(z, th(1), th(2))', 'unifinv(u, th(1), th(2))'], py: 'stats.uniform(th[0], th[1] - th[0])' },
   triangular: {
     r: ['ifelse(z <= th[1], 0, ifelse(z >= th[3], 1, ifelse(z <= th[2],\n' +
         '    (z - th[1])^2 / ((th[3] - th[1]) * (th[2] - th[1])), 1 - (th[3] - z)^2 / ((th[3] - th[1]) * (th[3] - th[2])))))',
         'ifelse(u < (th[2] - th[1]) / (th[3] - th[1]), th[1] + sqrt(u * (th[3] - th[1]) * (th[2] - th[1])),\n' +
-        '    th[3] - sqrt((1 - u) * (th[3] - th[1]) * (th[3] - th[2])))'],
+        '    th[3] - sqrt((1 - u) * (th[3] - th[1]) * (th[3] - th[2])))',
+        'ifelse(z <= th[1] | z >= th[3], 0, ifelse(z <= th[2], 2 * (z - th[1]) / ((th[3] - th[1]) * (th[2] - th[1])),\n' +
+        '    2 * (th[3] - z) / ((th[3] - th[1]) * (th[3] - th[2]))))'],
     m: ['min(max(((z > th(1)) & (z <= th(2))) .* (z - th(1)).^2 / ((th(3) - th(1)) * (th(2) - th(1))) + ...\n' +
         '    ((z > th(2)) & (z < th(3))) .* (1 - (th(3) - z).^2 / ((th(3) - th(1)) * (th(3) - th(2)))) + (z >= th(3)), 0), 1)',
         '(u < (th(2) - th(1)) / (th(3) - th(1))) .* (th(1) + sqrt(u * (th(3) - th(1)) * (th(2) - th(1)))) + ...\n' +
-        '    (u >= (th(2) - th(1)) / (th(3) - th(1))) .* (th(3) - sqrt((1 - u) * (th(3) - th(1)) * (th(3) - th(2))))'],
+        '    (u >= (th(2) - th(1)) / (th(3) - th(1))) .* (th(3) - sqrt((1 - u) * (th(3) - th(1)) * (th(3) - th(2))))',
+        '((z > th(1)) & (z <= th(2))) .* 2 .* (z - th(1)) / ((th(3) - th(1)) * max(th(2) - th(1), 1e-300)) + ...\n' +
+        '    ((z > th(2)) & (z < th(3))) .* 2 .* (th(3) - z) / ((th(3) - th(1)) * max(th(3) - th(2), 1e-300))'],
     py: 'stats.triang((th[1] - th[0]) / (th[2] - th[0]), th[0], th[2] - th[0])' },
   pert: {
     r: ['pbeta((z - th[1]) / (th[3] - th[1]), 1 + 4 * (th[2] - th[1]) / (th[3] - th[1]), 1 + 4 * (th[3] - th[2]) / (th[3] - th[1]))',
-        'th[1] + (th[3] - th[1]) * qbeta(u, 1 + 4 * (th[2] - th[1]) / (th[3] - th[1]), 1 + 4 * (th[3] - th[2]) / (th[3] - th[1]))'],
+        'th[1] + (th[3] - th[1]) * qbeta(u, 1 + 4 * (th[2] - th[1]) / (th[3] - th[1]), 1 + 4 * (th[3] - th[2]) / (th[3] - th[1]))',
+        'dbeta((z - th[1]) / (th[3] - th[1]), 1 + 4 * (th[2] - th[1]) / (th[3] - th[1]), 1 + 4 * (th[3] - th[2]) / (th[3] - th[1])) / (th[3] - th[1])'],
     m: ['betacdf(min(max((z - th(1)) / (th(3) - th(1)), 0), 1), 1 + 4 * (th(2) - th(1)) / (th(3) - th(1)), 1 + 4 * (th(3) - th(2)) / (th(3) - th(1)))',
-        'th(1) + (th(3) - th(1)) * betainv(u, 1 + 4 * (th(2) - th(1)) / (th(3) - th(1)), 1 + 4 * (th(3) - th(2)) / (th(3) - th(1)))'],
+        'th(1) + (th(3) - th(1)) * betainv(u, 1 + 4 * (th(2) - th(1)) / (th(3) - th(1)), 1 + 4 * (th(3) - th(2)) / (th(3) - th(1)))',
+        'betapdf((z - th(1)) / (th(3) - th(1)), 1 + 4 * (th(2) - th(1)) / (th(3) - th(1)), 1 + 4 * (th(3) - th(2)) / (th(3) - th(1))) / (th(3) - th(1))'],
     py: 'stats.beta(1 + 4 * (th[1] - th[0]) / (th[2] - th[0]), 1 + 4 * (th[2] - th[1]) / (th[2] - th[0]), th[0], th[2] - th[0])' },
-  beta: { r: ['pbeta((z - th[3]) / (th[4] - th[3]), th[1], th[2])', 'th[3] + (th[4] - th[3]) * qbeta(u, th[1], th[2])'],
-          m: ['betacdf(min(max((z - th(3)) / (th(4) - th(3)), 0), 1), th(1), th(2))', 'th(3) + (th(4) - th(3)) * betainv(u, th(1), th(2))'],
+  beta: { r: ['pbeta((z - th[3]) / (th[4] - th[3]), th[1], th[2])', 'th[3] + (th[4] - th[3]) * qbeta(u, th[1], th[2])',
+        'dbeta((z - th[3]) / (th[4] - th[3]), th[1], th[2]) / (th[4] - th[3])'],
+          m: ['betacdf(min(max((z - th(3)) / (th(4) - th(3)), 0), 1), th(1), th(2))', 'th(3) + (th(4) - th(3)) * betainv(u, th(1), th(2))',
+        'betapdf((z - th(3)) / (th(4) - th(3)), th(1), th(2)) / (th(4) - th(3))'],
           py: 'stats.beta(th[0], th[1], th[2], th[3] - th[2])' },
-  johnsonSB: { r: ['pnorm(th[1] + th[2] * qlogis(pmin(pmax((z - th[3]) / th[4], 0), 1)))', 'th[3] + th[4] * plogis((qnorm(u) - th[1]) / th[2])'],
+  johnsonSB: { r: ['pnorm(th[1] + th[2] * qlogis(pmin(pmax((z - th[3]) / th[4], 0), 1)))', 'th[3] + th[4] * plogis((qnorm(u) - th[1]) / th[2])',
+        'ifelse(z > th[3] & z < th[3] + th[4], th[2] / (th[4] * ((z - th[3]) / th[4]) * (1 - (z - th[3]) / th[4])) *\n' +
+        '    dnorm(th[1] + th[2] * qlogis(pmin(pmax((z - th[3]) / th[4], 1e-300), 1 - 1e-16))), 0)'],
                m: ['normcdf(th(1) + th(2) * log(min(max((z - th(3)) / th(4), 0), 1) ./ (1 - min(max((z - th(3)) / th(4), 0), 1))))',
-                   'th(3) + th(4) ./ (1 + exp(-(norminv(u) - th(1)) / th(2)))'],
+                   'th(3) + th(4) ./ (1 + exp(-(norminv(u) - th(1)) / th(2)))',
+        '((z > th(3)) & (z < th(3) + th(4))) .* th(2) ./ (th(4) * max((z - th(3)) / th(4), 1e-300) .* max(1 - (z - th(3)) / th(4), 1e-300)) .* ...\n' +
+        '    normpdf(th(1) + th(2) * log(max((z - th(3)) / th(4), 1e-300) ./ max(1 - (z - th(3)) / th(4), 1e-300)))'],
                py: 'stats.johnsonsb(th[0], th[1], th[2], th[3])' },
-  johnsonSU: { r: ['pnorm(th[1] + th[2] * asinh((z - th[3]) / th[4]))', 'th[3] + th[4] * sinh((qnorm(u) - th[1]) / th[2])'],
-               m: ['normcdf(th(1) + th(2) * asinh((z - th(3)) / th(4)))', 'th(3) + th(4) * sinh((norminv(u) - th(1)) / th(2))'],
+  johnsonSU: { r: ['pnorm(th[1] + th[2] * asinh((z - th[3]) / th[4]))', 'th[3] + th[4] * sinh((qnorm(u) - th[1]) / th[2])',
+        'th[2] / (th[4] * sqrt(1 + ((z - th[3]) / th[4])^2)) * dnorm(th[1] + th[2] * asinh((z - th[3]) / th[4]))'],
+               m: ['normcdf(th(1) + th(2) * asinh((z - th(3)) / th(4)))', 'th(3) + th(4) * sinh((norminv(u) - th(1)) / th(2))',
+        'th(2) ./ (th(4) * sqrt(1 + ((z - th(3)) / th(4)).^2)) .* normpdf(th(1) + th(2) * asinh((z - th(3)) / th(4)))'],
                py: 'stats.johnsonsu(th[0], th[1], th[2], th[3])' }
 };
 RANGE_FAM.erlang = RANGE_FAM.gamma;
 
+/* Scripts for a fit to recorded ranges, a model cut off at zero, or both.
+   The cut model is the family given that it is at or above 0, and so its
+   likelihood is the uncut one less n ln(1 - F(0)); values recorded exactly
+   need each family's density for it (the third entry of RANGE_FAM's r and
+   m, and SciPy's frozen pdf). A beta keeps the upper end the page read off
+   the data, and searches its lower end freely; the page searches it below
+   the ordinary fit's, which leaves the same optimum. */
 function rangeScripts(fit, x, seed, B, src) {
-  var d = fit.dist, rc = fit.rec, F = RANGE_FAM[d.key], np = d.params.length, i;
+  var d = fit.dist, rc = fit.rec || null, F = RANGE_FAM[d.key], np = d.params.length, i;
   var s = summarize(x), n = x.length, P = pageNum;
-  var a = recLow(rc), refl = !!fit.reflect;
+  var cut = isCut(fit), cap = cutCap(d), a = rc ? recLow(rc) : 0, refl = !!fit.reflect;
+  var lockU = cut && d.key === 'beta' && !(fit.fixed && fit.fixed[3] !== null && fit.fixed[3] !== undefined);
   /* Which numbers this page estimated: the parameters not held (and not a
-     whole number, held at the page's value), and the shift unless it was
-     held or stopped at 0 by the floor. */
+     whole number, held at the page's value, nor a cut beta's upper end),
+     and the shift unless it was held or stopped at 0 by the floor. */
   var est = [], onLog = [], logIdx = INTERVAL_LOG[d.key] || [];
   for (i = 0; i < np; i++) {
     if (fit.fixed && fit.fixed[i] !== null && fit.fixed[i] !== undefined) continue;
     if (d.params[i].whole) continue;
+    if (lockU && i === 3) continue;
     est.push(i); onLog.push(logIdx.indexOf(i) >= 0);
   }
   var hasS = d.shiftable && (refl || fit.shift !== 0 || fit.floorBound || fit.shiftHeld);
   var estS = hasS && !fit.shiftHeld && !fit.floorBound;
-  var floor0 = !!fit.floor0 && !refl && estS;
+  var floor0 = !!fit.floor0 && !refl && estS && !cut;
+  /* A cut fit's start, minimum, or parameters are only loosely placed for a
+     shifted family or a beta, and its numbers are printed without a verdict. */
+  var loose = cut && ((d.shiftable && !refl) || d.key === 'beta');
   var th = fit.p.slice(); if (hasS) th.push(fit.shift);
   var S = np + 1;   /* the shift's place in th, counted from 1 */
   var D = ksStat(s.sorted, gofCdf(fit), fitAtom(fit)).D;
   var ic = infoCriteria(fit.ll, fit.k, n);
-  var how = rc.kind === 'down' ? 'rounded down to a step of ' + num(rc.h) + ', and so a recorded v was somewhere from v to v + ' + num(rc.h)
+  var how = !rc ? ''
+          : rc.kind === 'down' ? 'rounded down to a step of ' + num(rc.h) + ', and so a recorded v was somewhere from v to v + ' + num(rc.h)
           : rc.kind === 'up' ? 'rounded up to a step of ' + num(rc.h) + ', and so a recorded v was somewhere from v - ' + num(rc.h) + ' to v'
           : 'rounded to the nearest ' + num(rc.h) + ', and so a recorded v was somewhere from v - ' + num(rc.h / 2) + ' to v + ' + num(rc.h / 2);
   var head = function (c) {
-    var L = ['This page fitted the ' + distLower(d) + (refl ? ', mirrored as c - Y,' : hasS ? ' with a location shift' : '') +
-             ' to the ranges your values stand for:',
-             'they are ' + how + '.',
-             'The fit maximizes the probability the model gives those ranges (the grouped-data,',
-             'or interval-censored, likelihood), and so does this script. It starts from the',
-             'page\'s estimates and prints each number beside the page\'s, with "agrees" or "DIFFERS".'];
+    var what = 'This page fitted the ' + distLower(d) + (refl ? ', mirrored as c - Y,' : hasS ? ' with a location shift' : '');
+    var L = cut
+      ? [what + ' cut off at zero' + (rc ? ', to the ranges your values stand for:' : '.')]
+      : [what + ' to the ranges your values stand for:'];
+    if (rc) L.push('they are ' + how + '.');
+    if (cut) L.push('Cut off at zero, the model is the ' + distLower(d) + ' given that it is at or above 0:',
+                    'its part below 0 is removed and the rest scaled up by 1 / (1 - F(0)), and at',
+                    'most ' + (cap === 0.5 ? 'half' : num(100 * cap) + '%') + ' of it may be cut, as on the page.');
+    if (rc) L.push('The fit maximizes the probability the model gives those ranges (the grouped-data,',
+                   'or interval-censored, likelihood), and so does this script. It starts from the',
+                   'page\'s estimates and prints each number beside the page\'s, with "agrees" or "DIFFERS".');
+    else L.push('The fit maximizes the cut model\'s likelihood, and so does this script. It starts',
+                'from the page\'s estimates and prints each number beside the page\'s, with "agrees"',
+                'or "DIFFERS".');
     return L.map(function (l) { return c + ' ' + l; }).join('\n') + '\n';
   };
   var keptNote = function (c) {
@@ -7516,7 +7655,8 @@ function rangeScripts(fit, x, seed, B, src) {
     for (i = 0; i < np; i++) {
       if (est.indexOf(i) >= 0) continue;
       L.push(c + ' ' + d.params[i].name + ' is held at ' + num(fit.p[i]) +
-             (d.params[i].whole && !(fit.fixed && fit.fixed[i] !== null && fit.fixed[i] !== undefined)
+             (lockU && i === 3 ? ', where the ordinary fit reads it off the data; K still counts it.'
+              : d.params[i].whole && !(fit.fixed && fit.fixed[i] !== null && fit.fixed[i] !== undefined)
                ? ', the whole number this page chose; K still counts it.' : ', as on the page.'));
     }
     if (hasS && fit.shiftHeld) L.push(c + ' The ' + (refl ? 'end c' : 'shift') + ' is held at ' + num(fit.shift) + ', as on the page.');
@@ -7538,17 +7678,32 @@ function rangeScripts(fit, x, seed, B, src) {
   /* The estimates are compared to three digits and the log-likelihood to six:
      where the likelihood is nearly flat (two ends inside one recorded range,
      say), two optimizers stop at slightly different points of equal
-     likelihood. A fit that ran off to its limit (fit.edge) has parameters
-     that are not determined at all, and they are printed without a verdict. */
+     likelihood. A fit that ran off to its limit (fit.edge), or a cut fit
+     whose start is only loosely placed, has parameters that the data do not
+     settle, and they are printed without a verdict. */
   function estLines(c, cmp, show) {
+    var bare = !!fit.edge || loose;
     var L = [c + (fit.edge ? ' This fit runs off toward its ' + fit.edge + ' limit, where these parameters are not\n' +
                              c + ' determined; compare the log-likelihood instead.'
-                           : ' The estimates are compared to three digits, the log-likelihood to six: where\n' +
-                             c + ' the likelihood is nearly flat, two optimizers stop at slightly different\n' +
-                             c + ' points of equal likelihood.')];
-    labels.forEach(function (lb, j) { L.push(fit.edge ? show(lb, j) : cmp(lb, j)); });
+                 : loose ? ' Other starts below 0 fit nearly as well, each with its own shape and scale, and\n' +
+                           c + ' so these parameters are not settled one at a time; compare the log-likelihood.'
+                 : ' The estimates are compared to three digits, the log-likelihood to six: where\n' +
+                   c + ' the likelihood is nearly flat, two optimizers stop at slightly different\n' +
+                   c + ' points of equal likelihood.')];
+    labels.forEach(function (lb, j) { L.push(bare ? show(lb, j) : cmp(lb, j)); });
     return L.join('\n') + '\n';
   }
+  /* What the search may reach: a shift below top (the upper end of the
+     smallest value's range), or for a cut model below 0 (and, recorded
+     exactly, below the smallest value by a thousandth of the range); a
+     mirror image's c above bottom (the lower end of the largest value's
+     range, or the largest value plus that thousandth). */
+  var bootNote = cut
+    ? 'Each resample is drawn from the cut model and refitted cut off at zero; the page also\n' +
+      'tries the model held at 0 and keeps the better, which this script leaves out.'
+    : 'The classical p-value does not apply; the bootstrap below records each resample the\n' +
+      'same way and refits it the same way.';
+  var bn = function (c) { return bootNote.split('\n').map(function (l) { return c + ' ' + l; }).join('\n') + '\n'; };
   var out = {};
 
   /* ── R ── */
@@ -7556,43 +7711,59 @@ function rangeScripts(fit, x, seed, B, src) {
   var lit = function (v) { return v.map(function (q) { return P(q); }).join(', '); };
   out.r = head('#') + keptNote('#') + src1('#') +
     'x <- ' + (xr || 'read.csv("input-analyzer-data.csv", comment.char = "#")$value   # use the CSV download button') + '\n\n' +
-    'h <- ' + num(rc.h) + '; a <- ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' +
+    (rc ? 'h <- ' + num(rc.h) + '; a <- ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' : '') +
+    (cut ? 'cut_max <- ' + cap + '   # the most of the model that may be cut off\n' : '') +
     '# The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th[' + S + '] the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
     'cdf0 <- function(z, th) ' + F.r[0] + '\n' +
     'q0 <- function(u, th) ' + F.r[1] + '\n' +
-    (refl ? 'cdf <- function(q, th) 1 - cdf0(th[' + S + '] - q, th)\nqf <- function(u, th) th[' + S + '] - q0(1 - u, th)\n'
-     : hasS ? 'cdf <- function(q, th) cdf0(q - th[' + S + '], th)\nqf <- function(u, th) th[' + S + '] + q0(u, th)\n'
-     : 'cdf <- cdf0\nqf <- q0\n') + '\n' +
+    (rc ? '' : 'd0 <- function(z, th) ' + F.r[2] + '\n') +
+    (refl ? 'cdf <- function(q, th) 1 - cdf0(th[' + S + '] - q, th)\nqf <- function(u, th) th[' + S + '] - q0(1 - u, th)\n' +
+            (rc ? '' : 'dens <- function(q, th) d0(th[' + S + '] - q, th)\n')
+     : hasS ? 'cdf <- function(q, th) cdf0(q - th[' + S + '], th)\nqf <- function(u, th) th[' + S + '] + q0(u, th)\n' +
+            (rc ? '' : 'dens <- function(q, th) d0(q - th[' + S + '], th)\n')
+     : 'cdf <- cdf0\nqf <- q0\n' + (rc ? '' : 'dens <- d0\n')) +
+    (cut ? '# Cut off at zero: the CDF and quantile of the model given that it is at or above 0.\n' +
+           'cdfc <- function(q, th) { m <- cdf(0, th); pmax(0, (cdf(pmax(q, 0), th) - m) / (1 - m)) }\n' +
+           'qc <- function(u, th) { m <- cdf(0, th); qf(m + (1 - m) * u, th) }\n'
+         : 'cdfc <- cdf\nqc <- qf\n') + '\n' +
     'report <- function(label, value, page, tol = 1e-6) {\n' +
     '  same <- !is.na(value) && abs(value - page) <= tol * max(1, abs(page))\n' +
     '  cat(sprintf("%-28s %14.7g   page %14.7g   %s\\n", label, value, page, if (same) "agrees" else "DIFFERS"))\n' +
     '}\n\n' +
     '# What is estimated: th[est], searched on the log scale where it must be\n' +
-    '# positive' + (estS ? ', and the ' + (refl ? 'end c' : 'shift') + ', searched as ' +
-      (refl ? 'c = bottom + exp(t), with bottom the lower end of the largest value\'s range'
-            : 'top - exp(t), with top the upper end of the smallest value\'s range') : '') + '.\n' +
+    '# positive' + (estS ? ', and the ' + (refl ? 'end c, searched as c = lo_s + exp(t)' : 'shift, searched as hi_s - exp(t)') : '') + '.\n' +
     'est <- c(' + est.map(function (j) { return j + 1; }).join(', ') + '); on_log <- c(' +
       onLog.map(function (b) { return b ? 'TRUE' : 'FALSE'; }).join(', ') + '); est_s <- ' + (estS ? 'TRUE' : 'FALSE') + '\n' +
-    'cells <- function(v) {\n' +
-    '  tb <- table(v); u <- as.numeric(names(tb))\n' +
-    '  list(lo = u + a, hi = u + a + h, n = as.vector(tb), top = min(u) + a + h, bottom = max(u) + a)\n' +
-    '}\n' +
+    (rc ? 'cells <- function(v) {\n' +
+          '  tb <- table(v); u <- as.numeric(names(tb))\n' +
+          '  list(lo = u + a, hi = u + a + h, n = as.vector(tb), N = length(v),\n' +
+          '       hi_s = ' + (cut ? '0' : 'min(u) + a + h') + ', lo_s = max(u) + a)\n' +
+          '}\n'
+        : 'cells <- function(v) {\n' +
+          '  r <- max(v) - min(v)\n' +
+          '  list(x = v, N = length(v), hi_s = min(0, min(v) - 1e-3 * r), lo_s = max(v) + 1e-3 * r)\n' +
+          '}\n') +
     'unpack <- function(t, th0, C) {\n' +
     '  th <- th0; m <- length(est)\n' +
     '  v <- t[seq_len(m)]; v[on_log] <- exp(v[on_log]); th[est] <- v\n' +
-    '  if (est_s) th[' + S + '] <- ' + (refl ? 'C$bottom + exp(t[m + 1])' : 'C$top - exp(t[m + 1])') + '\n' +
+    '  if (est_s) th[' + S + '] <- ' + (refl ? 'C$lo_s + exp(t[m + 1])' : 'C$hi_s - exp(t[m + 1])') + '\n' +
     '  th\n' +
     '}\n' +
     'pack <- function(th, C) {\n' +
     '  t <- th[est]; t[on_log] <- log(t[on_log])\n' +
-    '  c(t, if (est_s) log(' + (refl ? 'max(th[' + S + '] - C$bottom, 1e-6 * h)' : 'max(C$top - th[' + S + '], 1e-6 * h)') + '))\n' +
+    '  c(t, if (est_s) log(' + (refl ? 'max(th[' + S + '] - C$lo_s, 1e-12)' : 'max(C$hi_s - th[' + S + '], 1e-12)') + '))\n' +
     '}\n' +
     'nll <- function(t, th0, C) {\n' +
     '  th <- unpack(t, th0, C)\n' +
     (floor0 ? '  if (th[' + S + '] < 0) return(1e300)\n' : '') +
-    '  pr <- cdf(C$hi, th) - cdf(C$lo, th)\n' +
-    '  if (any(!(pr > 0))) return(1e300)\n' +
-    '  -sum(C$n * log(pr))\n' +
+    (cut ? '  k <- 1 - cdf(0, th)\n  if (!(k >= 1 - cut_max)) return(1e300)\n' : '') +
+    (rc ? '  pr <- cdf(C$hi, th) - cdf(' + (cut ? 'pmax(C$lo, 0)' : 'C$lo') + ', th)\n' +
+          '  if (any(!(pr > 0))) return(1e300)\n' +
+          '  ll <- sum(C$n * log(pr))\n'
+        : '  dv <- dens(C$x, th)\n' +
+          '  if (any(!(dv > 0))) return(1e300)\n' +
+          '  ll <- sum(log(dv))\n') +
+    '  -(ll' + (cut ? ' - C$N * log(k)' : '') + ')\n' +
     '}\n' +
     '# passes and tol trade accuracy for speed: the bootstrap refits use fewer.\n' +
     'fit_one <- function(v, th0, passes = 3, tol = 1e-14) {\n' +
@@ -7610,20 +7781,24 @@ function rangeScripts(fit, x, seed, B, src) {
     'report("log-likelihood", f$ll, ' + P(ic.ll) + ')\n' +
     'report("AIC", 2 * K - 2 * f$ll, ' + P(ic.aic) + ')\n' +
     'report("BIC", K * log(n) - 2 * f$ll, ' + P(ic.bic) + ')\n\n' +
-    '# K-S D of the recorded values against the distribution of a recorded\n' +
-    '# value: the chance of recording v or less is the model\'s probability up to\n' +
-    '# the top of v\'s range. The classical p-value does not apply; the bootstrap\n' +
-    '# below records each resample the same way and refits it the same way.\n' +
-    'Dstat <- function(v, th) {\n' +
-    '  tb <- table(v); u <- as.numeric(names(tb)); e <- cumsum(as.vector(tb)) / length(v)\n' +
-    '  max(abs(e - cdf(u + a + h, th)), abs(c(0, head(e, -1)) - cdf(u + a, th)))\n' +
-    '}\n' +
+    (rc ? '# K-S D of the recorded values against the distribution of a recorded\n' +
+          '# value: the chance of recording v or less is the model\'s probability up to\n' +
+          '# the top of v\'s range.\n' + bn('#') +
+          'Dstat <- function(v, th) {\n' +
+          '  tb <- table(v); u <- as.numeric(names(tb)); e <- cumsum(as.vector(tb)) / length(v)\n' +
+          '  max(abs(e - cdfc(u + a + h, th)), abs(c(0, head(e, -1)) - cdfc(u + a, th)))\n' +
+          '}\n'
+        : '# K-S D against the cut model. The classical p-value does not apply.\n' + bn('#') +
+          'Dstat <- function(v, th) {\n' +
+          '  v <- sort(v); n <- length(v); Fv <- cdfc(v, th)\n' +
+          '  max(seq_len(n) / n - Fv, Fv - (seq_len(n) - 1) / n)\n' +
+          '}\n') +
     'Dobs <- Dstat(x, f$th)\n' +
     'report("K-S D", Dobs, ' + P(D) + ', 1e-4)\n\n' +
-    'rec <- function(v) ' + recExpr('r') + '\n' +
+    (rc ? 'rec <- function(v) ' + recExpr('r') + '\n' : '') +
     'set.seed(' + seed + '); B <- ' + B + '   # this takes a while: every resample is refitted\n' +
     'Db <- replicate(B, {\n' +
-    '  y <- rec(qf(runif(n), f$th))\n' +
+    '  y <- ' + (rc ? 'rec(qc(runif(n), f$th))' : 'qc(runif(n), f$th)') + '\n' +
     '  g <- tryCatch(fit_one(y, f$th, 1, 1e-10), error = function(e) NULL)\n' +
     '  if (is.null(g) || !is.finite(g$ll)) NA else Dstat(y, g$th)\n' +
     '})\n' +
@@ -7638,46 +7813,63 @@ function rangeScripts(fit, x, seed, B, src) {
     'import numpy as np\nfrom scipy import stats, optimize\n\n' +
     (xp ? 'x = ' + xp : 'with open("input-analyzer-data.csv") as fh:   # use the CSV download button\n' +
                        '    x = np.array([float(ln.split(",")[1]) for ln in fh if ln[:1].isdigit()])') + '\n\n' +
-    'h, a = ' + num(rc.h) + ', ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' +
+    (rc ? 'h, a = ' + num(rc.h) + ', ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' : '') +
+    (cut ? 'cut_max = ' + cap + '   # the most of the model that may be cut off\n' : '') +
     '# The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th[' + np + '] the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
     'def base(th):\n    return ' + F.py + '\n' +
-    (refl ? 'def cdf(q, th):\n    return base(th).sf(th[' + np + '] - q)\ndef qf(u, th):\n    return th[' + np + '] - base(th).ppf(1 - u)\n'
-     : hasS ? 'def cdf(q, th):\n    return base(th).cdf(q - th[' + np + '])\ndef qf(u, th):\n    return th[' + np + '] + base(th).ppf(u)\n'
-     : 'def cdf(q, th):\n    return base(th).cdf(q)\ndef qf(u, th):\n    return base(th).ppf(u)\n') + '\n' +
+    (refl ? 'def cdf(q, th):\n    return base(th).sf(th[' + np + '] - q)\ndef qf(u, th):\n    return th[' + np + '] - base(th).ppf(1 - u)\n' +
+            'def logdens(q, th):\n    return base(th).logpdf(th[' + np + '] - q)\n'
+     : hasS ? 'def cdf(q, th):\n    return base(th).cdf(q - th[' + np + '])\ndef qf(u, th):\n    return th[' + np + '] + base(th).ppf(u)\n' +
+              'def logdens(q, th):\n    return base(th).logpdf(q - th[' + np + '])\n'
+     : 'def cdf(q, th):\n    return base(th).cdf(q)\ndef qf(u, th):\n    return base(th).ppf(u)\n' +
+       'def logdens(q, th):\n    return base(th).logpdf(q)\n') +
+    (cut ? '# Cut off at zero: the CDF and quantile of the model given that it is at or above 0.\n' +
+           'def cdfc(q, th):\n    m = cdf(0.0, th)\n    return np.maximum(0.0, (cdf(np.maximum(q, 0.0), th) - m) / (1 - m))\n' +
+           'def qc(u, th):\n    m = cdf(0.0, th)\n    return qf(m + (1 - m) * u, th)\n'
+         : 'cdfc, qc = cdf, qf\n') + '\n' +
     'def report(label, value, page, tol=1e-6):\n' +
     '    same = np.isfinite(value) and abs(value - page) <= tol * max(1, abs(page))\n' +
     '    print(f"{label:<28} {value:14.7g}   page {page:14.7g}   {\'agrees\' if same else \'DIFFERS\'}")\n\n' +
     'est = [' + est.join(', ') + ']; on_log = [' + onLog.map(function (b) { return b ? 'True' : 'False'; }).join(', ') +
       ']; est_s = ' + (estS ? 'True' : 'False') + '\n' +
-    'def cells(v):\n' +
-    '    u, cnt = np.unique(v, return_counts=True)\n' +
-    '    return dict(lo=u + a, hi=u + a + h, n=cnt, top=u[0] + a + h, bottom=u[-1] + a)\n' +
+    (rc ? 'def cells(v):\n' +
+          '    u, cnt = np.unique(v, return_counts=True)\n' +
+          '    return dict(lo=u + a, hi=u + a + h, n=cnt, N=len(v), hi_s=' + (cut ? '0.0' : 'u[0] + a + h') + ', lo_s=u[-1] + a)\n'
+        : 'def cells(v):\n' +
+          '    r = np.max(v) - np.min(v)\n' +
+          '    return dict(x=np.asarray(v, dtype=float), N=len(v), hi_s=min(0.0, np.min(v) - 1e-3 * r), lo_s=np.max(v) + 1e-3 * r)\n') +
     'def unpack(t, th0, C):\n' +
     '    th = np.array(th0, dtype=float)\n' +
     '    for i, (j, lg) in enumerate(zip(est, on_log)):\n' +
     '        th[j] = np.exp(t[i]) if lg else t[i]\n' +
     '    if est_s:\n' +
-    '        th[' + np + '] = ' + (refl ? 'C["bottom"] + np.exp(t[-1])' : 'C["top"] - np.exp(t[-1])') + '\n' +
+    '        th[' + np + '] = ' + (refl ? 'C["lo_s"] + np.exp(t[-1])' : 'C["hi_s"] - np.exp(t[-1])') + '\n' +
     '    return th\n' +
     'def pack(th, C):\n' +
     '    t = [np.log(th[j]) if lg else th[j] for j, lg in zip(est, on_log)]\n' +
     '    if est_s:\n' +
-    '        t.append(np.log(' + (refl ? 'max(th[' + np + '] - C["bottom"], 1e-6 * h)' : 'max(C["top"] - th[' + np + '], 1e-6 * h)') + '))\n' +
+    '        t.append(np.log(' + (refl ? 'max(th[' + np + '] - C["lo_s"], 1e-12)' : 'max(C["hi_s"] - th[' + np + '], 1e-12)') + '))\n' +
     '    return np.array(t)\n' +
     'def nll(t, th0, C):\n' +
     '    th = unpack(t, th0, C)\n' +
     (floor0 ? '    if th[' + np + '] < 0:\n        return 1e300\n' : '') +
     '    with np.errstate(all="ignore"):\n' +
-    '        pr = cdf(C["hi"], th) - cdf(C["lo"], th)\n' +
-    '    if not np.all(pr > 0):\n' +
-    '        return 1e300\n' +
-    '    return -np.sum(C["n"] * np.log(pr))\n' +
-    '# passes and tol trade accuracy for speed: the bootstrap refits use fewer.\n' +
-    'def fit_one(v, th0, passes=3, tol=1e-12):\n' +
+    (cut ? '        k = 1 - cdf(0.0, th)\n' : '') +
+    (rc ? '        pr = cdf(C["hi"], th) - cdf(' + (cut ? 'np.maximum(C["lo"], 0.0)' : 'C["lo"]') + ', th)\n'
+        : '        ld = logdens(C["x"], th)\n') +
+    (cut ? '    if not k >= 1 - cut_max:\n        return 1e300\n' : '') +
+    (rc ? '    if not np.all(pr > 0):\n        return 1e300\n    ll = np.sum(C["n"] * np.log(pr))\n'
+        : '    if not np.all(np.isfinite(ld)):\n        return 1e300\n    ll = np.sum(ld)\n') +
+    '    return -(ll' + (cut ? ' - C["N"] * np.log(k)' : '') + ')\n' +
+    '# passes and the tolerances trade accuracy for speed: the bootstrap refits use\n' +
+    '# fewer. SciPy stops only when both the points and the values have settled, and\n' +
+    '# along a nearly flat ridge the points settle slowly, and so their tolerance,\n' +
+    '# xtol, is looser than that of the log-likelihood, tol.\n' +
+    'def fit_one(v, th0, passes=3, tol=1e-10, xtol=1e-7):\n' +
     '    C = cells(v); t = pack(th0, C)\n' +
     '    for _ in range(passes):\n' +
     '        t = optimize.minimize(nll, t, args=(th0, C), method="Nelder-Mead",\n' +
-    '                              options={"xatol": tol, "fatol": tol, "maxiter": 40000, "maxfev": 40000}).x\n' +
+    '                              options={"xatol": xtol, "fatol": tol, "maxiter": 10000, "maxfev": 10000}).x\n' +
     '    return unpack(t, th0, C), -nll(t, th0, C)\n\n' +
     'th_page = [' + lit(th) + ']\n' +
     'th, ll = fit_one(x, th_page)\n' +
@@ -7687,22 +7879,25 @@ function rangeScripts(fit, x, seed, B, src) {
     'report("log-likelihood", ll, ' + P(ic.ll) + ')\n' +
     'report("AIC", 2 * K - 2 * ll, ' + P(ic.aic) + ')\n' +
     'report("BIC", K * np.log(n) - 2 * ll, ' + P(ic.bic) + ')\n\n' +
-    '# K-S D of the recorded values against the distribution of a recorded\n' +
-    '# value: the chance of recording v or less is the model\'s probability up to\n' +
-    '# the top of v\'s range. The classical p-value does not apply; the bootstrap\n' +
-    '# below records each resample the same way and refits it the same way.\n' +
-    'def Dstat(v, th):\n' +
-    '    u, cnt = np.unique(v, return_counts=True); e = np.cumsum(cnt) / len(v)\n' +
-    '    return max(np.max(np.abs(e - cdf(u + a + h, th))),\n' +
-    '               np.max(np.abs(np.concatenate(([0.0], e[:-1])) - cdf(u + a, th))))\n' +
+    (rc ? '# K-S D of the recorded values against the distribution of a recorded\n' +
+          '# value: the chance of recording v or less is the model\'s probability up to\n' +
+          '# the top of v\'s range.\n' + bn('#') +
+          'def Dstat(v, th):\n' +
+          '    u, cnt = np.unique(v, return_counts=True); e = np.cumsum(cnt) / len(v)\n' +
+          '    return max(np.max(np.abs(e - cdfc(u + a + h, th))),\n' +
+          '               np.max(np.abs(np.concatenate(([0.0], e[:-1])) - cdfc(u + a, th))))\n'
+        : '# K-S D against the cut model. The classical p-value does not apply.\n' + bn('#') +
+          'def Dstat(v, th):\n' +
+          '    v = np.sort(v); n = len(v); Fv = cdfc(v, th); i = np.arange(1, n + 1)\n' +
+          '    return max(np.max(i / n - Fv), np.max(Fv - (i - 1) / n))\n') +
     'Dobs = Dstat(x, th)\n' +
     'report("K-S D", Dobs, ' + P(D) + ', 1e-4)\n\n' +
-    'def rec(v):\n    return ' + recExpr('p') + '\n' +
+    (rc ? 'def rec(v):\n    return ' + recExpr('p') + '\n' : '') +
     'rng = np.random.default_rng(' + seed + '); B = ' + B + '   # this takes a while: every resample is refitted\n' +
     'Db = []\n' +
     'for _ in range(B):\n' +
-    '    y = rec(qf(rng.random(n), th))\n' +
-    '    g, lg = fit_one(y, th, 1, 1e-8)\n' +
+    '    y = ' + (rc ? 'rec(qc(rng.random(n), th))' : 'qc(rng.random(n), th)') + '\n' +
+    '    g, lg = fit_one(y, th, 1, 1e-6, 1e-4)\n' +
     '    if np.isfinite(lg):\n' +
     '        Db.append(Dstat(y, g))\n' +
     'Db = np.array(Db)\n' +
@@ -7724,15 +7919,24 @@ function rangeScripts(fit, x, seed, B, src) {
     '% Needs the Statistics and Machine Learning Toolbox.\n' +
     (xm ? 'x = ' + xm + "';" : 'x = readmatrix("input-analyzer-data.csv");   % use the CSV download button\n' +
                                 'x = x(:, 2);                                 % column 1 is the row index') + '\n\n' +
-    'M.h = ' + num(rc.h) + '; M.a = ' + num(a) + ';   % a recorded v stands for [v + a, v + a + h]\n' +
+    (rc ? 'M.h = ' + num(rc.h) + '; M.a = ' + num(a) + ';   % a recorded v stands for [v + a, v + a + h]\n' : '') +
+    'M.rec = ' + (rc ? 'true' : 'false') + '; M.cut = ' + (cut ? 'true' : 'false') + '; M.cutMax = ' + cap +
+      ';   % the most of the model that may be cut off\n' +
     '% The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th(' + S + ') the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
     'cdf0 = @(z, th) ' + F.m[0] + ';\n' +
     'q0 = @(u, th) ' + F.m[1] + ';\n' +
-    (refl ? 'M.cdf = @(q, th) 1 - cdf0(th(' + S + ') - q, th);\nM.qf = @(u, th) th(' + S + ') - q0(1 - u, th);\n'
-     : hasS ? 'M.cdf = @(q, th) cdf0(q - th(' + S + '), th);\nM.qf = @(u, th) th(' + S + ') + q0(u, th);\n'
-     : 'M.cdf = cdf0;\nM.qf = q0;\n') + '\n' +
+    (rc ? '' : 'd0 = @(z, th) ' + F.m[2] + ';\n') +
+    (refl ? 'M.cdf = @(q, th) 1 - cdf0(th(' + S + ') - q, th);\nM.qf = @(u, th) th(' + S + ') - q0(1 - u, th);\n' +
+            (rc ? '' : 'M.dens = @(q, th) d0(th(' + S + ') - q, th);\n')
+     : hasS ? 'M.cdf = @(q, th) cdf0(q - th(' + S + '), th);\nM.qf = @(u, th) th(' + S + ') + q0(u, th);\n' +
+            (rc ? '' : 'M.dens = @(q, th) d0(q - th(' + S + '), th);\n')
+     : 'M.cdf = cdf0;\nM.qf = q0;\n' + (rc ? '' : 'M.dens = d0;\n')) +
+    (cut ? '% Cut off at zero: the CDF and quantile of the model given that it is at or above 0.\n' +
+           'M.cdfc = @(q, th) max(0, (M.cdf(max(q, 0), th) - M.cdf(0, th)) / (1 - M.cdf(0, th)));\n' +
+           'M.qc = @(u, th) M.qf(M.cdf(0, th) + (1 - M.cdf(0, th)) * u, th);\n'
+         : 'M.cdfc = M.cdf;\nM.qc = M.qf;\n') + '\n' +
     '% What is estimated: th(M.est), searched on the log scale where it must be positive' +
-      (estS ? ',\n% and the ' + (refl ? 'end c, searched as c = bottom + exp(t)' : 'shift, searched as top - exp(t)') : '') + '.\n' +
+      (estS ? ',\n% and the ' + (refl ? 'end c, searched as c = loS + exp(t)' : 'shift, searched as hiS - exp(t)') : '') + '.\n' +
     'M.est = [' + est.map(function (j) { return j + 1; }).join(' ') + ']; M.onLog = logical([' +
       onLog.map(function (b) { return b ? '1' : '0'; }).join(' ') + ']); M.estS = ' + (estS ? 'true' : 'false') +
       '; M.S = ' + S + '; M.refl = ' + (refl ? 'true' : 'false') + '; M.floor0 = ' + (floor0 ? 'true' : 'false') + ';\n\n' +
@@ -7747,17 +7951,17 @@ function rangeScripts(fit, x, seed, B, src) {
     mRep('log-likelihood', 'll', ic.ll, '1e-6') +
     mRep('AIC', '2*K - 2*ll', ic.aic, '1e-6') +
     mRep('BIC', 'K*log(n) - 2*ll', ic.bic, '1e-6') + '\n' +
-    '% K-S D of the recorded values against the distribution of a recorded\n' +
-    '% value: the chance of recording v or less is the model\'s probability up to\n' +
-    '% the top of v\'s range. The classical p-value does not apply; the bootstrap\n' +
-    '% below records each resample the same way and refits it the same way.\n' +
+    (rc ? '% K-S D of the recorded values against the distribution of a recorded\n' +
+          '% value: the chance of recording v or less is the model\'s probability up to\n' +
+          '% the top of v\'s range.\n'
+        : '% K-S D against the cut model. The classical p-value does not apply.\n') + bn('%') +
     'Dobs = Dstat(x, th, M);\n' +
     mRep('K-S D', 'Dobs', D, '1e-4') + '\n' +
-    'rec = @(v) ' + recExpr('m') + ';\n' +
+    (rc ? 'rec = @(v) ' + recExpr('m') + ';\n' : '') +
     'rng(' + seed + '); B = ' + B + ';   % this takes a while: every resample is refitted\n' +
     'Db = nan(B, 1);\n' +
     'for b = 1:B\n' +
-    '  y = rec(M.qf(rand(n, 1), th));\n' +
+    '  y = ' + (rc ? 'rec(M.qc(rand(n, 1), th))' : 'M.qc(rand(n, 1), th)') + ';\n' +
     '  [g, lg] = fit_one(y, th, M, 1, 1e-8);\n' +
     '  if isfinite(lg), Db(b) = Dstat(y, g, M); end\n' +
     'end\n' +
@@ -7766,29 +7970,48 @@ function rangeScripts(fit, x, seed, B, src) {
     "% MATLAB's generator is not this page's MRG32k3a, and so expect agreement to\n" +
     '% bootstrap noise, not to the last digit.\n\n' +
     'function C = cells(v, M)\n' +
-    '  [u, ~, j] = unique(v(:)); C.n = accumarray(j, 1);\n' +
-    '  C.lo = u + M.a; C.hi = u + M.a + M.h; C.top = u(1) + M.a + M.h; C.bottom = u(end) + M.a;\n' +
+    '  v = v(:); C.N = numel(v);\n' +
+    '  if M.rec\n' +
+    '    [u, ~, j] = unique(v); C.n = accumarray(j, 1);\n' +
+    '    C.lo = u + M.a; C.hi = u + M.a + M.h; C.loS = u(end) + M.a;\n' +
+    '    if M.cut, C.hiS = 0; else, C.hiS = u(1) + M.a + M.h; end\n' +
+    '  else\n' +
+    '    r = max(v) - min(v); C.x = v; C.hiS = min(0, min(v) - 1e-3 * r); C.loS = max(v) + 1e-3 * r;\n' +
+    '  end\n' +
     'end\n' +
     'function th = unpack(t, th0, C, M)\n' +
     '  th = th0; m = numel(M.est);\n' +
     '  v = t(1:m); v(M.onLog) = exp(v(M.onLog)); th(M.est) = v;\n' +
     '  if M.estS\n' +
-    '    if M.refl, th(M.S) = C.bottom + exp(t(m + 1)); else, th(M.S) = C.top - exp(t(m + 1)); end\n' +
+    '    if M.refl, th(M.S) = C.loS + exp(t(m + 1)); else, th(M.S) = C.hiS - exp(t(m + 1)); end\n' +
     '  end\n' +
     'end\n' +
     'function t = pack(th, C, M)\n' +
     '  t = th(M.est); t(M.onLog) = log(t(M.onLog));\n' +
     '  if M.estS\n' +
-    '    if M.refl, t(end + 1) = log(max(th(M.S) - C.bottom, 1e-6 * M.h));\n' +
-    '    else, t(end + 1) = log(max(C.top - th(M.S), 1e-6 * M.h)); end\n' +
+    '    if M.refl, t(end + 1) = log(max(th(M.S) - C.loS, 1e-12));\n' +
+    '    else, t(end + 1) = log(max(C.hiS - th(M.S), 1e-12)); end\n' +
     '  end\n' +
     'end\n' +
     'function f = nll(t, th0, C, M)\n' +
     '  th = unpack(t, th0, C, M);\n' +
     '  if M.floor0 && th(M.S) < 0, f = 1e300; return; end\n' +
-    '  pr = M.cdf(C.hi, th) - M.cdf(C.lo, th);\n' +
-    '  if ~all(pr > 0), f = 1e300; return; end\n' +
-    '  f = -sum(C.n .* log(pr));\n' +
+    '  k = 1;\n' +
+    '  if M.cut\n' +
+    '    k = 1 - M.cdf(0, th);\n' +
+    '    if ~(k >= 1 - M.cutMax), f = 1e300; return; end\n' +
+    '  end\n' +
+    '  if M.rec\n' +
+    '    lo = C.lo; if M.cut, lo = max(lo, 0); end\n' +
+    '    pr = M.cdf(C.hi, th) - M.cdf(lo, th);\n' +
+    '    if ~all(pr > 0), f = 1e300; return; end\n' +
+    '    ll = sum(C.n .* log(pr));\n' +
+    '  else\n' +
+    '    dv = M.dens(C.x, th);\n' +
+    '    if ~all(dv > 0), f = 1e300; return; end\n' +
+    '    ll = sum(log(dv));\n' +
+    '  end\n' +
+    '  f = -(ll - C.N * log(k));\n' +
     'end\n' +
     '% passes and tol trade accuracy for speed: the bootstrap refits use fewer.\n' +
     'function [th, ll] = fit_one(v, th0, M, passes, tol)\n' +
@@ -7798,8 +8021,13 @@ function rangeScripts(fit, x, seed, B, src) {
     '  th = unpack(t, th0, C, M); ll = -nll(t, th0, C, M);\n' +
     'end\n' +
     'function D = Dstat(v, th, M)\n' +
-    '  [u, ~, j] = unique(v(:)); e = cumsum(accumarray(j, 1)) / numel(v);\n' +
-    '  D = max([abs(e - M.cdf(u + M.a + M.h, th)); abs([0; e(1:end - 1)] - M.cdf(u + M.a, th))]);\n' +
+    '  if M.rec\n' +
+    '    [u, ~, j] = unique(v(:)); e = cumsum(accumarray(j, 1)) / numel(v);\n' +
+    '    D = max([abs(e - M.cdfc(u + M.a + M.h, th)); abs([0; e(1:end - 1)] - M.cdfc(u + M.a, th))]);\n' +
+    '  else\n' +
+    '    v = sort(v(:)); n = numel(v); Fv = M.cdfc(v, th); i = (1:n)\';\n' +
+    '    D = max([i / n - Fv; Fv - (i - 1) / n]);\n' +
+    '  end\n' +
     'end\n' +
     'function report(label, value, page, tol)\n' +
     '  same = isfinite(value) && abs(value - page) <= tol * max(1, abs(page));\n' +
@@ -7810,8 +8038,10 @@ function rangeScripts(fit, x, seed, B, src) {
 }
 
 function reproScripts(fit, x, seed, B, src) {
-  /* A fit to recorded ranges has scripts of its own; see rangeScripts. */
-  if (fit.rec && fit.dist.kind !== 'discrete' && RANGE_FAM[fit.dist.key]) return rangeScripts(fit, x, seed, B, src);
+  /* A fit to recorded ranges, or cut off at zero, has scripts of its own;
+     see rangeScripts. */
+  if ((fit.rec || isCut(fit)) && fit.dist.kind !== 'discrete' && RANGE_FAM[fit.dist.key])
+    return rangeScripts(fit, x, seed, B, src);
   /* A mirrored fit is refitted as what it is underneath: the unmirrored
      family on y = c - x, which starts at zero. Each script says so first,
      and the Python one still counts c when this page estimated it. */
@@ -9742,6 +9972,15 @@ function countTable(dist, p, U, S, maxLen) {
    why } when the tool cannot write it. */
 function nortaSimQuantile(fit, tool, Z, U) {
   var S = NORTA_SYN[tool], N = num;
+  /* A cut model's quantile is the whole model's at 1 - (1 - m)(1 - U), m the
+     share cut; a family written in Z would need the inverse of the normal
+     CDF there, which these tools lack. */
+  if (isCut(fit)) {
+    var rc = nortaSimQuantile(Object.assign({}, fit, { cut: null }), tool, Z,
+                              '(1 - ' + plainProb(1 - fit.cutMass) + '*(1 - ' + U + '))');
+    return rc.expr && rc.u ? { expr: S.max + '(0, ' + rc.expr + ')', u: true, note: rc.note }
+      : { expr: null, why: 'the ' + distLower(fit.dist) + ' cut off at zero needs the inverse of the normal CDF' };
+  }
   if (fit.reflect) {
     var r = nortaSimQuantile(Object.assign({}, fit, { shift: 0, reflect: false }), tool, '(-' + Z + ')', '(1 - ' + U + ')');
     return r.expr ? { expr: N(fit.shift) + ' - (' + r.expr + ')', u: r.u, note: r.note } : r;
@@ -9805,6 +10044,15 @@ function nortaSimQuantile(fit, tool, Z, U) {
    functions; MATLAB's need the Statistics and Machine Learning Toolbox. */
 function nortaVecQuantile(fit, tool, Z, U) {
   var N = num;
+  /* A cut model's quantile is the whole model's at 1 - (1 - m)(1 - U), m the
+     share cut, written so that rounding m can never carry it past 1; a
+     family written in Z reads the normal quantile of that. */
+  if (isCut(fit)) {
+    var U2 = '(1 - ' + num(1 - fit.cutMass, 12) + ' * (1 - ' + U + '))';
+    var Z2 = (tool === 'r' ? 'qnorm(' : tool === 'matlab' ? 'norminv(' : 'stats.norm.ppf(') + U2 + ')';
+    var rq = nortaVecQuantile(Object.assign({}, fit, { cut: null }), tool, Z2, U2);
+    return { expr: clipAtZero(tool, rq.expr), u: true, note: rq.note, pre: rq.pre };
+  }
   if (fit.reflect) {
     var r = nortaVecQuantile(Object.assign({}, fit, { shift: 0, reflect: false }), tool, '(-' + Z + ')', '(1 - ' + U + ')');
     return { expr: N(fit.shift) + ' - (' + r.expr + ')', u: r.u, note: r.note, pre: r.pre };
@@ -13724,12 +13972,19 @@ var TOOLS = [
   ['python', 'Python', 'SciPy']
 ];
 
+/* The ranking CSV's Arena column: a cut model's line only when it draws the
+   cut model itself, since the CSV has no room for the note on drawing again. */
+function arenaCell(fit) {
+  var ex = IA.expressions(fit);
+  return ex.arena && (!IA.isCut(fit) || ex.exact.arena) ? ex.arena : '';
+}
 function renderExport() {
   var r = pickedRow(), host = $('export-out');
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
   var ex = IA.expressions(r.fit);
   var h = '<div class="plot-hd">One draw from the fitted ' + esc(distLower(r.dist)) +
-          (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') + '</div>';
+          (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') +
+          (IA.isCut(r.fit) ? ', cut off at zero' : '') + '</div>';
   for (var i = 0; i < TOOLS.length; i++) {
     var key = TOOLS[i][0];
     if (!ex[key] && ex.notes[key]) {
@@ -14651,7 +14906,7 @@ function csvRanking() {
                r.noCriteria ? '' : IA.num(r.aic, 10),
                r.noCriteria ? '' : IA.num(r.bic, 10),
                Number.isFinite(r.sqe) ? IA.num(r.sqe, 8) : '',
-               IA.expressions(r.fit).arena || '']);
+               arenaCell(r.fit)]);
   }
   download('input-analyzer-ranking.csv', IA.toCsv(rows));
 }

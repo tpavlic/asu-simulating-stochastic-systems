@@ -53,7 +53,7 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      element's text. Moving the sentinels, or reaching for `document` inside them, breaks both.*
   2. *`verify_input_analyzer.mjs` and its companion `verify_input_analyzer_jobs.mjs` are not shipped
      with the widget and are not linked from the site. Run the first (`node
-     input_modeling/verify_input_analyzer.mjs`, about six minutes on a multi-core machine) after
+     input_modeling/verify_input_analyzer.mjs`, about twelve minutes on a multi-core machine) after
      touching anything in the core. Its slow Monte Carlo loops live in the jobs module and run on
      worker threads, one fewer than the cores, with the same seeds as a serial loop, and so the output
      is the same either way; `IA_SERIAL=1` runs them on one thread (several times longer), and
@@ -220,7 +220,23 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      its limit, that a shifted family's start is placed only loosely, and, when the data hold an
      exact 0 that a resample would rarely reproduce, that the A–D p-value runs low; the table labels
      a row cut for an exact 0 or stopped at its limit, and `derivedRows` gives a cut model's own
-     mean and median. Section 16e of the verify checks
+     mean and median. Exports (`cutExpressions`): R, MATLAB, and Python draw every cut family exactly,
+     a uniform mapped into the part kept through NORTA's quantile writers (`nortaVecQuantile` reads a
+     cut fit's quantile as the whole model's at 1 − (1 − m)(1 − U)); Arena, Simio, and AnyLogic draw
+     the Weibull and the log-logistic exactly in one expression with one uniform, mirrored or not,
+     and every other family there gets the uncut line with a note on drawing again until the value
+     is at or above 0 (an Arena Decide loop, a Simio process loop, an AnyLogic do-while). Every
+     exact line is held at 0 by a maximum that absorbs only rounding. NORTA's Arena, Simio, and
+     AnyLogic blocks refuse a cut family written in Z, for want of the normal quantile. The Simio
+     closed forms use only documented functions but have not been run in Simio, and the Arena and
+     AnyLogic ones have been checked only by evaluating AnyLogic's line as JavaScript. The scripts
+     (`rangeScripts`, now for ranges, a cut, or both) maximize the cut likelihood from the page's
+     estimates, using each family's density in R and MATLAB (`RANGE_FAM`'s third entry) for values
+     recorded exactly, and print each number beside the page's; a cut shifted family's or beta's
+     estimates, which the data place only loosely, print without a verdict. Python's Nelder–Mead
+     gets a looser point tolerance than value tolerance, as SciPy stops only when both settle and a
+     flat ridge kept it running to its cap. The ranking CSV leaves a cut row's Arena column empty
+     unless the line is exact. Section 16e of the verify checks
      the cut functions against each other and the truncated normal's closed forms, the limits,
      the minimum hold, exact zeros, ranges, the mirror image, and the bootstrap's calibration (a
      cut normal and a cut gamma at 4.0% to 5.5%, and data recorded to 0.1 with exact zeros in the
