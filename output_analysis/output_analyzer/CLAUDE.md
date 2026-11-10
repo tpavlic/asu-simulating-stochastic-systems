@@ -289,8 +289,9 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   `legend(container, items, fig)`; a legend drawn without it is left out of the images, and a
   trailing "(drag …)" or "(click …)" hint is dropped from its label there. The SVG file names
   Arial and its metric twins (`SVG_FONTS`) and embeds no font, because an editor such as Inkscape
-  ignores an embedded one, while the PNG and COPY images, drawn by the browser, embed the page's
-  Outfit. Commit tag `oa`. Conventions
+  ignores an embedded one, and sets smaller any label that would run past the frame in Arial
+  (`fitText`), while the PNG and COPY images, drawn by the browser, embed the page's Outfit.
+  Commit tag `oa`. Conventions
   relied on by code outside the page, which any later edit has to preserve:*
   1. *The `js/` files are the source, and the page embeds a copy of every one of them between its
      `OA-MODULES-BEGIN` / `OA-MODULES-END` markers as `<script type="text/plain" data-module>`

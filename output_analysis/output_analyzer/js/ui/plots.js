@@ -1792,10 +1792,44 @@ function legendStrip(fig, width, family) {
 export function figureToSvgString(fig) {
   return exportSvg(fig, '', SVG_FONTS).str;
 }
+// The figure was laid out in the page's font, and a label that just fits the
+// frame there can run past its edge in the wider SVG_FONTS (a long title on a
+// phone's narrow figure, say). Each such label in the clone is set smaller,
+// by as much as it takes to end inside the frame again, measured from where
+// the page drew it. A rotated label is left alone.
+function fitText(fig, clone, fonts) {
+  const live = fig.svg.querySelectorAll('text'), copies = clone.querySelectorAll('text');
+  const svgCtm = fig.svg.getScreenCTM();
+  if (!svgCtm || live.length !== copies.length) return;
+  const toSvg = svgCtm.inverse();
+  if (!legCtx) legCtx = document.createElement('canvas').getContext('2d');
+  live.forEach((t, i) => {
+    const r = t.getBoundingClientRect();
+    if (!r.width || !t.textContent.trim()) return;
+    const m = t.getScreenCTM();
+    if (!m || Math.abs(m.b) > 1e-6 || Math.abs(m.c) > 1e-6) return;
+    const left = new DOMPoint(r.left, r.top).matrixTransform(toSvg).x;
+    const right = new DOMPoint(r.right, r.top).matrixTransform(toSvg).x;
+    const cs = getComputedStyle(t);
+    const size = parseFloat(cs.fontSize);
+    legCtx.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + size + 'px ' + (t.classList.contains('mono') ? fonts.mono : fonts.sans);
+    const wNew = legCtx.measureText(t.textContent).width;
+    if (wNew <= r.width / m.a) return;
+    const anchor = cs.textAnchor;
+    // The edge the label grows from stays where the page drew it.
+    const room = anchor === 'end' ? right - 2
+      : anchor === 'middle' ? 2 * Math.min((left + right) / 2 - 2, fig.w - 2 - (left + right) / 2)
+      : fig.w - 2 - left;
+    if (wNew <= room) return;
+    copies[i].setAttribute('font-size', r1(size * Math.max(0.6, room / wNew)));
+  });
+}
+
 // `fontCss` is `@font-face` rules to embed (see exportFontCss), and `fonts`
 // the sans and mono families the text is set in.
 function exportSvg(fig, fontCss, fonts) {
   const clone = fig.svg.cloneNode(true);
+  if (fonts !== PAGE_FONTS) fitText(fig, clone, fonts);
   clone.querySelectorAll('[data-noexport]').forEach(n => n.remove());
   const leg = legendStrip(fig, fig.w, fonts.sans);
   const w = fig.w, h = leg ? fig.h + 4 + leg.h + 12 : fig.h;
