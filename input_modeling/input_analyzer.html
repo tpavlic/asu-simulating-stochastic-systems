@@ -12084,7 +12084,7 @@ function renderRanking() {
       '<td class="rank-name">' +
         (tie ? '<span class="sr-only">Within 2 of the best ' + tieBy.toUpperCase() + '. </span>' : '') +
         (NAME_TIPS[r.key] ? '<span class="tip" data-tip="' + NAME_TIPS[r.key] + '" data-tip-press>' +
-                            esc(r.dist.name) + '</span>' : esc(r.dist.name)) +
+                            esc(rowName(r)) + '</span>' : esc(rowName(r))) +
         (rejected[r.key] || '') +
         ((r.key === 'johnsonSB' || r.key === 'johnsonSU') && (near = nearSpecialCase(r, ST.rows))
            ? tipSpan('rank-sub', near.label, near.tip) :
@@ -12093,9 +12093,9 @@ function renderRanking() {
          r.fit.atBound ? '<span class="rank-sub">' + (r.fit.reflect ? 'c sits at the largest observation'
                                                     : 'shift sits at the smallest observation') + '</span>' :
          r.fit.edge ? tipSpan('rank-sub', 'close to its ' + EDGE_NAME[r.fit.edge] + ' limit', edgeTip(r.fit.edge, r.key)) :
-         r.fit.cutForZero ? tipSpan('rank-sub', 'truncated below zero', 'A value is exactly 0, which this family ' +
+         r.fit.cutForZero ? tipSpan('rank-sub', 'for an exact 0', 'A value is exactly 0, which this family ' +
            'cannot produce with its start held at 0, and so this row is truncated below zero instead.') :
-         r.fit.cutLimit ? tipSpan('rank-sub', 'truncated at its limit', 'This fit removes as much of the model ' +
+         r.fit.cutLimit ? tipSpan('rank-sub', 'at its limit', 'This fit removes as much of the model ' +
            'as truncation is allowed to, and the likelihood was still rising; the fit details say more.') :
          (near = nearSpecialCase(r, ST.rows)) ? tipSpan('rank-sub', near.label, near.tip) :
          r.fit.reflect ? '<span class="rank-sub">mirrored: c − X</span>' : '') +
@@ -12171,7 +12171,7 @@ function renderRanking() {
    left for the reader to notice. */
 function renderDisagreement(bAic, bBic, bLl, bSqe) {
   var nm = function (k) {
-    for (var i = 0; i < ST.rows.length; i++) if (ST.rows[i].key === k) return ST.rows[i].dist.name;
+    for (var i = 0; i < ST.rows.length; i++) if (ST.rows[i].key === k) return rowLower(ST.rows[i]);
     return k;
   };
   var msgs = [];
@@ -12274,7 +12274,7 @@ function renderFit() {
     return;
   }
   var f = r.fit, d = r.dist;
-  $('fit-which').textContent = d.name + (f.reflect ? ', mirrored as c − X'
+  $('fit-which').textContent = rowName(r) + (f.reflect ? ', mirrored as c − X'
     : ST.shift && d.shiftable ? ', with a location shift' : '');
 
   var holds = ST.holds[r.key] || [];
@@ -12902,6 +12902,11 @@ function edgeTip(edge, key) {
 /* A note or a name carrying a tip: hover or focus shows it with a mouse,
    and a long press shows it on a touch screen, where a tap still selects
    the row. */
+/* A row's name as the reader sees it: "Truncated gamma" for a row whose
+   model was truncated below zero (in either mode), and the family's own
+   name otherwise. */
+function rowName(r) { return r.ok && r.fit && IA.isCut(r.fit) ? 'Truncated ' + r.dist.lower : r.dist.name; }
+function rowLower(r) { return r.ok && r.fit && IA.isCut(r.fit) ? 'truncated ' + r.dist.lower : distLower(r.dist); }
 function tipSpan(cls, text, tip) {
   return '<span class="' + cls + '"><span class="tip" data-tip="' + tip + '" data-tip-press>' + text + '</span></span>';
 }
@@ -13223,10 +13228,10 @@ function renderDensity() {
       label: b.perValue ? 'your data, one bin per value' : 'your data (' + b.k + ' bins)' }
   ];
   if (showFit) items.push({ mark: discrete ? 'dot' : 'line', color: 'var(--fit)',
-    label: discrete ? r.dist.name + ', expected' : 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') });
+    label: discrete ? r.dist.name + ', expected' : 'fitted ' + rowLower(r) + (r.fit.reflect ? ', mirrored' : '') });
   P.legend(lc.x, lc.y, items);
   host.innerHTML = (showFit
-      ? P.svg('Histogram of the data with the fitted ' + r.dist.name + ' density',
+      ? P.svg('Histogram of the data with the fitted ' + rowLower(r) + ' density',
           'Histogram of the data in counts, with the fitted density over it')
       : P.svg('Histogram of the data', 'Histogram of the data in counts')) +
     densityCaption(discrete, n, b, scale, showFit);
@@ -13290,7 +13295,7 @@ function renderChi() {
        kept after its test rejects it. */
     var hasEmpirical = ST.rows.some(function (row) { return row.key === 'discreteEmpirical' && row.ok; });
     var verdict = chi.p < 0.05
-      ? 'At the 5% level this <strong>rejects</strong> the fitted ' + esc(distLower(r.dist)) +
+      ? 'At the 5% level this <strong>rejects</strong> the fitted ' + esc(rowLower(r)) +
         ' on this binning.' +
         (r.dist.kind === 'discrete' && hasEmpirical
           ? ' If no standard pmf passes its tests, the <em>Empirical (discrete)</em> row of the ' +
@@ -13299,7 +13304,7 @@ function renderChi() {
             'below first: the test then rejects misses too small to matter.'
           : '')
       : 'At the 5% level this <strong>does not reject</strong> the fitted ' +
-        esc(distLower(r.dist)) + ' on this binning.';
+        esc(rowLower(r)) + ' on this binning.';
     var bres = (ST.gof && ST.gofFor === fitSignature()) ? ST.gof.res : null;
     var bootP = bres && Number.isFinite(bres.pChi)
       ? fmtP(bres.pChi, 1 / (bres.usedChi + 1)) : '—';
@@ -13702,7 +13707,7 @@ function renderGof() {
     verdict =
       '<div class="hint" style="margin-top:8px">At the 5% level, the bootstrap has K–S <strong>' +
       vD + '</strong> and A–D <strong>' + vA + '</strong> the fitted ' +
-      esc(distLower(r.dist)) + '. ' +
+      esc(rowLower(r)) + '. ' +
       (vD !== vA
         ? 'They disagree. Go by the test you chose before running it. A disagreement usually means ' +
           'the misfit sits in a tail, which A–D weights more heavily. '
@@ -13771,13 +13776,13 @@ function drawQQ() {
   var pts = [];
   for (i = 0; i < n; i++) pts.push([xs[i], ys[i]]);
   P.dots(pts, 'var(--obs)', 2.9);
-  P.labels('Quantile of the fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored,' : '') + ' model',
+  P.labels('Quantile of the fitted ' + rowLower(r) + (r.fit.reflect ? ', mirrored,' : '') + ' model',
            'Quantile of the data (sorted observations)');
   P.legend(P.mL + 12, P.mT + 16, [
     { mark: 'line', color: 'var(--fit)', label: 'perfect fit' },
     { mark: 'dot', color: 'var(--obs)', label: 'one observation' }
   ]);
-  host.innerHTML = P.svg('Q–Q plot: sorted observations against fitted ' + r.dist.name + ' quantiles',
+  host.innerHTML = P.svg('Q–Q plot: sorted observations against fitted ' + rowLower(r) + ' quantiles',
     'Q-Q plot of the sorted data against the fitted model quantiles') +
     '<div class="plot-cap">' + n + ' observations · correlation of the plotted points ' +
     '<strong class="mono">r = ' + fmt(rc, 5) + '</strong></div>';
@@ -13907,7 +13912,7 @@ function drawCDF() {
   if (ks.D === 0) {
     P.labels('Value', 'Cumulative probability');
     P.legend(leg.x, leg.y + 14, [
-      { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') },
+      { mark: 'line', color: 'var(--fit)', label: 'fitted ' + rowLower(r) + (r.fit.reflect ? ', mirrored' : '') },
       dataItem
     ]);
     var noGap = ' The fitted CDF matches every step, and so the K–S statistic is 0.';
@@ -14026,7 +14031,7 @@ function drawCDF() {
   P.text(spot.x, spot.y, dTxt, { raw: true, size: 10, fill: 'var(--alt)', weight: '700', anchor: spot.anchor });
   P.labels('Value', 'Cumulative probability');
   P.legend(leg.x, leg.y, [
-    { mark: 'line', color: 'var(--fit)', label: 'fitted ' + distLower(r.dist) + (r.fit.reflect ? ', mirrored' : '') },
+    { mark: 'line', color: 'var(--fit)', label: 'fitted ' + rowLower(r) + (r.fit.reflect ? ', mirrored' : '') },
     { mark: 'line', color: 'var(--alt)', width: 3, label: 'largest gap, D' },
     dataItem
   ]);
@@ -14092,9 +14097,8 @@ function renderExport() {
   var r = pickedRow(), host = $('export-out');
   if (!r) { host.innerHTML = '<div class="plot-empty">No fit yet.</div>'; return; }
   var ex = IA.expressions(r.fit);
-  var h = '<div class="plot-hd">One draw from the fitted ' + esc(distLower(r.dist)) +
-          (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') +
-          (IA.isCut(r.fit) ? ', truncated below zero' : '') + '</div>';
+  var h = '<div class="plot-hd">One draw from the fitted ' + esc(rowLower(r)) +
+          (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') + '</div>';
   for (var i = 0; i < TOOLS.length; i++) {
     var key = TOOLS[i][0];
     if (!ex[key] && ex.notes[key]) {
@@ -15010,7 +15014,7 @@ function csvRanking() {
       var v = r.fit.p[j];
       return pp.sym + '=' + (Array.isArray(v) ? v.length + ' values' : IA.num(v, 8));
     }).join('; ');
-    rows.push([r.dist.name, 'yes', ps, r.fit.shift ? IA.num(r.fit.shift, 8) : 0, r.fit.reflect ? 'yes' : 'no',
+    rows.push([rowName(r), 'yes', ps, r.fit.shift ? IA.num(r.fit.shift, 8) : 0, r.fit.reflect ? 'yes' : 'no',
                r.noCriteria ? '' : r.k,
                r.noCriteria ? '' : IA.num(r.ll, 10),
                r.noCriteria ? '' : IA.num(r.aic, 10),
@@ -15025,7 +15029,7 @@ function csvGof() {
   var r = pickedRow();
   if (!r) return;
   var rows = provenance(true);
-  rows.push(['distribution', r.dist.name]);
+  rows.push(['distribution', rowName(r)]);
   rows.push([]);
   var chi = r.noCriteria ? null : IA.chiSquareGOF(ST.x, r.fit, ST.bins);
   var F = IA.gofCdf(r.fit);
@@ -15112,7 +15116,7 @@ function csvPlotData() {
   var r = pickedRow();
   if (!r || !ST.bins || !ST.s) return;
   var rows = provenance();
-  rows.push(['distribution', r.dist.name]);
+  rows.push(['distribution', rowName(r)]);
   rows.push([]);
   var b = ST.bins, n = b.n, i;
   var bp = r.noCriteria ? null : IA.binProbabilities(r.fit, b.edges);
