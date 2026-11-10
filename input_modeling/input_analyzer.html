@@ -189,17 +189,19 @@ a:focus-visible, textarea:focus-visible {
 }
 
 /* ── Data entry ──────────────────────────────────────────────────────── */
-/* On a wide screen the paste box sits beside the summary cards, and the
-   sample and file buttons run across both columns underneath. On a narrow
-   one the column order is box, buttons, cards. */
+/* On a wide screen the paste box sits beside the summary cards, with the
+   sample and file controls under the box, where they take the room the
+   cards' notes leave below it. On a narrow one the column order is box,
+   controls, cards. */
 .data-grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 8px 13px;
-             grid-template-areas: "input info" "tools tools"; }
+             grid-template-areas: "input info" "tools info"; grid-template-rows: auto 1fr; }
 .data-input { grid-area: input; display: flex; flex-direction: column; }
 .data-info { grid-area: info; }
-.data-tools { grid-area: tools; }
+.data-tools { grid-area: tools; align-self: start; }
 .data-tools > .samples:first-child { margin-top: 0; }
 @media (max-width: 720px) {
-  .data-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: "input" "tools" "info"; }
+  .data-grid { grid-template-columns: minmax(0,1fr); grid-template-areas: "input" "tools" "info";
+               grid-template-rows: none; }
   .data-info { margin-top: 5px; }
 }
 .drop { position: relative; flex: 1 1 auto; display: flex; }
@@ -236,6 +238,7 @@ textarea.data-in:not(:placeholder-shown) {
              font-weight: 700; font-size: .95rem; }
 .drop.over .drop-hint { display: flex; }
 .samples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sample-pick { max-width: 100%; min-width: 0; }
 .parse-msg { font-size: .78rem; color: var(--muted); line-height: 1.45; margin-top: 8px;
              min-height: 1.2em; }
 .parse-msg.bad { color: var(--accent); font-weight: 600; }
@@ -633,14 +636,27 @@ footer a:hover { text-decoration: underline; }
       </div>
       <div class="data-tools">
         <div class="samples">
-          <span class="file-lbl" style="align-self:center">Samples:</span>
-          <button class="btn2" data-sample="iat" type="button">Clinic interarrivals</button>
-          <button class="btn2" data-sample="svc" type="button">Drive-through service</button>
-          <button class="btn2" data-sample="rep" type="button">CNC repair times</button>
-          <button class="btn2" data-sample="ins" type="button">Inspection times</button>
-          <button class="btn2" data-sample="ivr" type="button">Phone menu times (whole seconds)</button>
-          <button class="btn2" data-sample="dem" type="button">Parts demand (counts)</button>
-          <button class="btn2" data-sample="tbl" type="button">Board defects (table)</button>
+          <label class="file-lbl" for="sample-pick" style="align-self:center">Sample:</label>
+          <select id="sample-pick" class="sample-pick" autocomplete="off">
+            <optgroup label="Continuous values, measured exactly">
+              <option value="iat">Clinic interarrivals</option>
+              <option value="svc">Drive-through service</option>
+              <option value="rep">CNC repair times</option>
+              <option value="ins">Inspection times</option>
+            </optgroup>
+            <optgroup label="Continuous values that were rounded when recorded">
+              <option value="ivr">Phone IVR service times (whole seconds)</option>
+              <option value="setup">Machine setup times (nearest half minute)</option>
+            </optgroup>
+            <optgroup label="Continuous values best fit with truncated distributions">
+              <option value="wear">Tool wear per shift (microns)</option>
+            </optgroup>
+            <optgroup label="Discrete counts">
+              <option value="dem">Parts demand (counts)</option>
+              <option value="tbl">Board defects (table)</option>
+            </optgroup>
+          </select>
+          <button class="btn2" id="sample-load" type="button">Load</button>
         </div>
         <div class="samples" style="margin-top:6px">
           <label class="btn2" for="file-in" style="display:inline-block">Choose a file&hellip;</label>
@@ -818,8 +834,9 @@ footer a:hover { text-decoration: underline; }
         <label class="ctrl-lbl" for="rec-pick"><span class="tip" tabindex="0" id="rec-tip" data-tip="">Values were</span></label>
         <select id="rec-pick">
           <option value="nearest">rounded to the nearest 1</option>
-          <option value="down">rounded down to 1 (truncated)</option>
+          <option value="down">rounded down to 1</option>
           <option value="up">rounded up to 1</option>
+          <option value="trunc">truncated to 1</option>
           <option value="exact">recorded exactly</option>
         </select>
       </span>
@@ -834,11 +851,11 @@ footer a:hover { text-decoration: underline; }
         <input type="checkbox" id="reflect-chk"> <span class="tip">Fit the mirror image c − X</span>
       </label>
       <span class="ctrl-grp" id="zero-grp">
-        <label class="ctrl-lbl" for="zero-pick"><span class="tip" tabindex="0" id="zero-tip" data-tip="For values that are never negative, such as times. Holding each start at 0 or above keeps a shifted candidate from starting below zero and the triangular, PERT, beta, and Johnson Sᵦ from reaching below it; the normal and Johnson Sᵤ have no start to hold. Cutting each off at zero lets a candidate start or reach below 0 and removes the part below 0, which keeps every candidate at or above zero and allows a density that is above zero at 0 itself. Choose no to fit each candidate without either.">Keep models at or above zero</span></label>
+        <label class="ctrl-lbl" for="zero-pick"><span class="tip" tabindex="0" id="zero-tip" data-tip="For values that are never negative, such as times. Holding each start at 0 or above keeps a shifted candidate from starting below zero and the triangular, PERT, beta, and Johnson Sᵦ from reaching below it; the normal and Johnson Sᵤ have no start to hold. Truncating each below zero lets a candidate start or reach below 0, removes the part below 0, and scales up the rest (a truncated distribution), which keeps every candidate at or above zero and allows a density that is above zero at 0 itself. Choose no to fit each candidate without either.">Keep models at or above zero</span></label>
         <select id="zero-pick" autocomplete="off">
           <option value="allow">no</option>
           <option value="hold" selected>by holding each start at 0 or above</option>
-          <option value="cut">by cutting each off at zero</option>
+          <option value="cut">by truncating each below zero</option>
         </select>
       </span>
       <label class="chk" id="start1-wrap" data-tip="For counts that can never be 0, such as the number of items in a batch: the Poisson, negative binomial, binomial, and geometric are each fitted as 1 plus a draw so that they start at 1. The 1 is fixed, not estimated." data-tip-press>
@@ -5083,8 +5100,10 @@ function fitDistWith(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) 
    by 0, and so the degenerate case cannot occur, and every candidate's AIC
    is a log-probability comparable with every other's. A recorded value
    stands for [v - h/2, v + h/2] rounded to the nearest step, [v, v + h]
-   rounded down (or truncated, for values that are not negative), and
-   [v - h, v] rounded up.
+   rounded down, and [v - h, v] rounded up. Truncated (the digits past
+   the step dropped, which moves every value toward 0), it stands for
+   [v, v + h] above 0, [v - h, v] below it, and [-h, h] at 0 itself, and so
+   a recorded 0 covers two steps. Truncation needs 0 on the grid.
 
    The parameters, and the shift with them, are found by Nelder-Mead,
    started from the ordinary fit to the recorded values, or inside the
@@ -5100,7 +5119,7 @@ function fitDistWith(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) 
    ordinary fit. */
 /* The step, as a fraction of the SD, at and above which ranges are fitted. */
 var INTERVAL_STEP_SD = 0.05;
-var REC_KINDS = ['nearest', 'down', 'up'];
+var REC_KINDS = ['nearest', 'down', 'up', 'trunc'];
 /* The parameters searched on their logarithm, by family. */
 var INTERVAL_LOG = {
   expo: [0], gamma: [0, 1], erlang: [1], weibull: [0, 1], lognormal: [1], loglogistic: [0, 1],
@@ -5116,31 +5135,43 @@ function recordingRec(s, kind) {
   if (!g || !(s.sd > 0)) return null;
   var r = g.h / s.sd;
   if (r < INTERVAL_STEP_SD) return null;
-  return { h: g.h, off: g.off, dp: g.dp, kind: REC_KINDS.indexOf(kind) >= 0 ? kind : 'nearest', stepSd: r };
+  var k = REC_KINDS.indexOf(kind) >= 0 && (kind !== 'trunc' || zeroOnGrid(g)) ? kind : 'nearest';
+  return { h: g.h, off: k === 'trunc' ? 0 : g.off, dp: g.dp, kind: k, stepSd: r };
 }
+/* Whether 0 is a grid point, which truncation needs. */
+function zeroOnGrid(g) { return g.off < 1e-9 * g.h || g.off > (1 - 1e-9) * g.h; }
 function flipRec(rec) {
   var k = rec.kind === 'down' ? 'up' : rec.kind === 'up' ? 'down' : rec.kind;
   return { h: rec.h, off: -rec.off, dp: rec.dp, kind: k, stepSd: rec.stepSd };
 }
-/* Where the range of recorded value v starts, relative to v. */
-function recLow(rec) { return rec.kind === 'down' ? 0 : rec.kind === 'up' ? -rec.h : -rec.h / 2; }
+/* The range recorded value v stands for, as [lo, hi]. */
+function recSpan(rec, v) {
+  var h = rec.h;
+  if (rec.kind === 'trunc') {
+    var tol = 1e-9 * h;
+    return v > tol ? [v, v + h] : v < -tol ? [v - h, v] : [-h, h];
+  }
+  var a = rec.kind === 'down' ? 0 : rec.kind === 'up' ? -h : -h / 2;
+  return [v + a, v + a + h];
+}
 
 /* The distinct values, their counts, and their ranges, with an end shared
    by two neighboring ranges stored once, and so the CDF is evaluated once
    per end rather than twice. */
 function recCells(x, rec) {
   var s = x.slice().sort(function (a, b) { return a - b; });
-  var a = recLow(rec), h = rec.h, tol = 1e-9 * h;
+  var tol = 1e-9 * rec.h;
   var c = [], lo = [], hi = [], edges = [], i, j = -1;
   for (i = 0; i < s.length; i++) {
     if (i && s[i] === s[i - 1]) { c[j]++; continue; }
     j++; c.push(1);
-    var e0 = s[i] + a, e1 = e0 + h;
-    if (edges.length && Math.abs(edges[edges.length - 1] - e0) <= tol) lo.push(edges.length - 1);
-    else { edges.push(e0); lo.push(edges.length - 1); }
-    edges.push(e1); hi.push(edges.length - 1);
+    var sp = recSpan(rec, s[i]);
+    if (edges.length && Math.abs(edges[edges.length - 1] - sp[0]) <= tol) lo.push(edges.length - 1);
+    else { edges.push(sp[0]); lo.push(edges.length - 1); }
+    edges.push(sp[1]); hi.push(edges.length - 1);
   }
-  return { c: c, lo: lo, hi: hi, edges: edges, F: new Array(edges.length), top: s[0] + a + h };
+  return { c: c, lo: lo, hi: hi, edges: edges, F: new Array(edges.length), top: recSpan(rec, s[0])[1],
+           min: s[0], bottom: recSpan(rec, s[s.length - 1])[0] };
 }
 function cellLogLik(dist, p, g, C) {
   var e, j, sum = 0;
@@ -5159,7 +5190,7 @@ function fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts) {
   var shiftable = useShift && dist.shiftable;
   var shiftHeld = shiftable && fixedShift !== null && fixedShift !== undefined && Number.isFinite(fixedShift);
   var shiftOn = shiftable && !shiftHeld;
-  var floor0 = shiftOn && !!opts.floor0 && C.top - rec.h - recLow(rec) >= 0;
+  var floor0 = shiftOn && !!opts.floor0 && C.min >= 0;
   var logIdx = INTERVAL_LOG[dist.key] || [];
   var isHeld = function (j) { return held && fixed[j] !== null && fixed[j] !== undefined; };
   /* A family with its own minimum holds it at or above 0 as the shift is
@@ -5175,16 +5206,18 @@ function fitInterval(dist, x, useShift, fast, fixed, fixedShift, opts) {
     for (i = 0; i < np; i++) if (isHeld(i)) p0[i] = fixed[i];
     g0 = shiftHeld ? fixedShift : shiftOn && Number.isFinite(FIT_HINT_SHIFT) ? FIT_HINT_SHIFT : 0;
   } else {
-    base = fitDist(dist, x, useShift, fast, fixed, fixedShift, false, { floor0: opts.floor0 });
+    /* The ordinary fit, never cut for an exact 0: a recorded 0 stands for a
+       range that a model held at 0 can reach. */
+    base = fitDist(dist, x, useShift, fast, fixed, fixedShift, false, { floor0: opts.floor0, inCut: true });
     var lift = 0;
     if (!base.ok) {
       /* A recorded value the ordinary fit cannot take (a 0 for a lognormal)
          stands for a range the model can, and so the start comes from the
          tops of the ranges instead. */
-      lift = recLow(rec) + rec.h;
+      lift = C.top - C.min;
       var xt = x.map(function (v) { return v + lift; });
       var b2 = fitDist(dist, xt, useShift, fast, fixed, shiftHeld ? fixedShift + lift : fixedShift, false,
-                       { floor0: opts.floor0 });
+                       { floor0: opts.floor0, inCut: true });
       if (!b2.ok) return base;
       base = b2;
     }
@@ -5355,7 +5388,7 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
      the model stops being cut), and for a mirror image just above the
      largest; a beta's lower end stays below the ordinary fit's. */
   var gHi = rec ? 0 : Math.min(0, s.min - dLow);
-  var cLo = rec ? s.max + recLow(rec) : s.max + dLow;
+  var cLo = rec ? C.bottom : s.max + dLow;
   var Lcap = dist.key === 'beta' && base.ok ? base.p[2] : null;
   var cap = cutCap(dist);
 
@@ -5467,7 +5500,7 @@ function fitCut(dist, x, useShift, fast, fixed, fixedShift, reflect, opts) {
   var baseIn = base.ok && !(fitCdf(base)(0) > 0);
   if (baseIn && !(res.ll > base.ll + 1e-9)) return base;
   if (!Number.isFinite(res.ll))
-    return base.ok && baseIn ? base : { ok: false, msg: 'No cut-off model fits these values.' };
+    return base.ok && baseIn ? base : { ok: false, msg: 'No truncated model fits these values.' };
   var keep = keepOf(res.p, res.g);
   var nFree = held ? np - fixed.filter(function (v) { return v !== null && v !== undefined; }).length : dist.np;
   /* A Johnson member that runs off is named by its limit by the test in its
@@ -5734,8 +5767,8 @@ function cdfBelow(fit) {
   if (fit.rec) {
     /* A value recorded below v is a grid point below v, and the largest
        one's range ends at the next grid point's range start. */
-    var rc = fit.rec, a = recLow(rc);
-    return function (v) { return F(rc.off + Math.ceil((v - rc.off) / rc.h - 1e-9) * rc.h + a); };
+    var rc = fit.rec;
+    return function (v) { return F(recSpan(rc, rc.off + Math.ceil((v - rc.off) / rc.h - 1e-9) * rc.h)[0]); };
   }
   return fit.dist.kind === 'discrete' ? function (v) { return F(v - 1e-9); } : F;
 }
@@ -5750,8 +5783,8 @@ function cdfBelow(fit) {
 function gofCdf(fit) {
   var F = fitCdf(fit);
   if (!fit.rec) return F;
-  var top = recLow(fit.rec) + fit.rec.h;
-  return function (v) { return F(v + top); };
+  var rc = fit.rec;
+  return function (v) { return F(recSpan(rc, v)[1]); };
 }
 
 /* The first bin runs from minus infinity and the last to plus infinity,
@@ -5899,8 +5932,8 @@ function ksStat(sorted, F, atom) {
    puts on a single point, which is zero for every continuous candidate. */
 function fitAtom(fit) {
   if (fit.rec) {
-    var F = fitCdf(fit), a = recLow(fit.rec), h = fit.rec.h;
-    return function (v) { return F(v + a + h) - F(v + a); };
+    var F = fitCdf(fit), rc = fit.rec;
+    return function (v) { var sp = recSpan(rc, v); return F(sp[1]) - F(sp[0]); };
   }
   if (fit.dist.kind !== 'discrete') return function () { return 0; };
   return function (v) { return fit.dist.pdf(v - fit.shift, fit.p); };
@@ -6114,13 +6147,16 @@ function recordingGrid(sorted) {
   var step = distinct >= GRID_MIN_DISTINCT && minGap === g ? g : 1;
   return { h: step / sc, off: (((base % step) + step) % step) / sc, dp: dp };
 }
-/* Rounds v to a grid point: the nearest one, or the one below or above it
-   when grid.kind says the data were rounded down or up. Writing the result
+/* Rounds v to a grid point: the nearest one, the one below or above it
+   when grid.kind says the data were rounded down or up, or the one toward
+   0 when they were truncated (on a grid through 0). Writing the result
    back through toFixed keeps a value such as 0.30000000000000004 from
    creating a tie that is not there or failing to create one that is. */
 function snapToGrid(v, grid) {
-  var t = (v - grid.off) / grid.h;
-  var r = grid.off + (grid.kind === 'down' ? Math.floor(t) : grid.kind === 'up' ? Math.ceil(t) : Math.round(t)) * grid.h;
+  var off = grid.kind === 'trunc' ? 0 : grid.off, t = (v - off) / grid.h;
+  var k = grid.kind === 'down' ? Math.floor(t) : grid.kind === 'up' ? Math.ceil(t)
+        : grid.kind === 'trunc' ? Math.trunc(t) : Math.round(t);
+  var r = off + k * grid.h;
   return Math.abs(r) < 1e21 ? Number(r.toFixed(grid.dp)) : r;
 }
 
@@ -6826,7 +6862,7 @@ function cutExpressions(fit, sample) {
     var q = nortaVecQuantile(fit, t, 'z', 'u');
     out[t] = wrap[t](q.expr);
     out.exact[t] = true;
-    out.notes[t] = 'Inverse transform of the cut model: each uniform u is mapped into the part of the ' + low +
+    out.notes[t] = 'Inverse transform of the truncated model: each uniform u is mapped into the part of the ' + low +
       ' at or above 0, its top ' + N(100 * K, 3) + '%, and so no draw falls below 0. The maximum with 0 ' +
       'only absorbs rounding; it does not pile draws up at 0.';
   });
@@ -6847,15 +6883,15 @@ function cutExpressions(fit, sample) {
     }
     if (e) {
       out[t] = clipAtZero(t, e); out.exact[t] = true;
-      out.notes[t] = 'The ' + low + ' cut off at zero, drawn exactly from one uniform mapped into the part ' +
+      out.notes[t] = 'The ' + low + ' truncated below zero, drawn exactly from one uniform mapped into the part ' +
         'of the model at or above 0, and so no draw falls below 0. The maximum with 0 only absorbs rounding; ' +
         'it does not pile draws up at 0.';
       return;
     }
     out[t] = inner[t]; out.exact[t] = false;
     var tool = { arena: 'Arena', simio: 'Simio', anylogic: 'AnyLogic' }[t];
-    var head = 'No single ' + tool + ' expression draws this cut model. The line is the ' + low +
-      ' before the cut, which falls below 0 in ' + pct + '% of draws. ';
+    var head = 'No single ' + tool + ' expression draws this truncated model. The line is the ' + low +
+      ' before truncation, which falls below 0 in ' + pct + '% of draws. ';
     var how = t === 'arena'
       ? 'Assign it to an attribute, and have a Decide module send the entity back to that Assign while the ' +
         'attribute is below 0'
@@ -7607,7 +7643,21 @@ RANGE_FAM.erlang = RANGE_FAM.gamma;
 function rangeScripts(fit, x, seed, B, src) {
   var d = fit.dist, rc = fit.rec || null, F = RANGE_FAM[d.key], np = d.params.length, i;
   var s = summarize(x), n = x.length, P = pageNum;
-  var cut = isCut(fit), cap = cutCap(d), a = rc ? recLow(rc) : 0, refl = !!fit.reflect;
+  var cut = isCut(fit), cap = cutCap(d), refl = !!fit.reflect;
+  /* Each language's lower and upper end of a recorded value's range, as
+     functions of u: truncated values move toward 0, and so a recorded 0
+     stands for two steps. */
+  var trunc = rc && rc.kind === 'trunc';
+  var a = rc && !trunc ? recSpan(rc, 0)[0] : 0;
+  var ends = function (hName) {
+    if (trunc) return ['u - ' + hName + ' * (u <= 0)', 'u + ' + hName + ' * (u >= 0)'];
+    var lo = a === 0 ? 'u' : a < 0 ? 'u - ' + num(-a) : 'u + ' + num(a);
+    var hi = a + rc.h === 0 ? 'u' : 'u + ' + num(a + rc.h);
+    return [lo, hi];
+  };
+  var spanNote = !rc ? ''
+    : trunc ? 'truncated: a recorded v stands for [v, v + h] above 0, [v - h, v] below it, and [-h, h] at 0'
+    : 'a recorded v stands for [lo_of(v), hi_of(v)]';
   var lockU = cut && d.key === 'beta' && !(fit.fixed && fit.fixed[3] !== null && fit.fixed[3] !== undefined);
   /* Which numbers this page estimated: the parameters not held (and not a
      whole number, held at the page's value, nor a cut beta's upper end),
@@ -7632,20 +7682,21 @@ function rangeScripts(fit, x, seed, B, src) {
   var how = !rc ? ''
           : rc.kind === 'down' ? 'rounded down to a step of ' + num(rc.h) + ', and so a recorded v was somewhere from v to v + ' + num(rc.h)
           : rc.kind === 'up' ? 'rounded up to a step of ' + num(rc.h) + ', and so a recorded v was somewhere from v - ' + num(rc.h) + ' to v'
+          : rc.kind === 'trunc' ? 'truncated to a step of ' + num(rc.h) + ' (the digits past it dropped), and so a recorded v\nwas somewhere from v to v + ' + num(rc.h) + ' above 0, from v - ' + num(rc.h) + ' to v below it, and from -' + num(rc.h) + ' to ' + num(rc.h) + ' at 0'
           : 'rounded to the nearest ' + num(rc.h) + ', and so a recorded v was somewhere from v - ' + num(rc.h / 2) + ' to v + ' + num(rc.h / 2);
   var head = function (c) {
     var what = 'This page fitted the ' + distLower(d) + (refl ? ', mirrored as c - Y,' : hasS ? ' with a location shift' : '');
     var L = cut
-      ? [what + ' cut off at zero' + (rc ? ', to the ranges your values stand for:' : '.')]
+      ? [what + ' truncated below zero' + (rc ? ', to the ranges your values stand for:' : '.')]
       : [what + ' to the ranges your values stand for:'];
-    if (rc) L.push('they are ' + how + '.');
-    if (cut) L.push('Cut off at zero, the model is the ' + distLower(d) + ' given that it is at or above 0:',
+    if (rc) L = L.concat(('they are ' + how + '.').split('\n'));
+    if (cut) L.push('Truncated below zero, the model is the ' + distLower(d) + ' given that it is at or above 0:',
                     'its part below 0 is removed and the rest scaled up by 1 / (1 - F(0)), and at',
-                    'most ' + (cap === 0.5 ? 'half' : num(100 * cap) + '%') + ' of it may be cut, as on the page.');
+                    'most ' + (cap === 0.5 ? 'half' : num(100 * cap) + '%') + ' of it may be removed, as on the page.');
     if (rc) L.push('The fit maximizes the probability the model gives those ranges (the grouped-data,',
                    'or interval-censored, likelihood), and so does this script. It starts from the',
                    'page\'s estimates and prints each number beside the page\'s, with "agrees" or "DIFFERS".');
-    else L.push('The fit maximizes the cut model\'s likelihood, and so does this script. It starts',
+    else L.push('The fit maximizes the truncated model\'s likelihood, and so does this script. It starts',
                 'from the page\'s estimates and prints each number beside the page\'s, with "agrees"',
                 'or "DIFFERS".');
     return L.map(function (l) { return c + ' ' + l; }).join('\n') + '\n';
@@ -7667,7 +7718,8 @@ function rangeScripts(fit, x, seed, B, src) {
   /* The recording, as each language rounds a resample. */
   function recExpr(lang) {
     var fn = rc.kind === 'down' ? { r: 'floor', m: 'floor', p: 'np.floor' }[lang]
-           : rc.kind === 'up' ? { r: 'ceiling', m: 'ceil', p: 'np.ceil' }[lang] : { r: 'round', m: 'round', p: 'np.round' }[lang];
+           : rc.kind === 'up' ? { r: 'ceiling', m: 'ceil', p: 'np.ceil' }[lang]
+           : rc.kind === 'trunc' ? { r: 'trunc', m: 'fix', p: 'np.trunc' }[lang] : { r: 'round', m: 'round', p: 'np.round' }[lang];
     var v = rc.off ? '(v - ' + num(rc.off) + ')' : 'v';
     var e = rc.h === 1 ? fn + '(' + v + ')' : fn + '(' + v + ' / ' + num(rc.h) + ') * ' + num(rc.h);
     return rc.off ? num(rc.off) + ' + ' + e : e;
@@ -7699,7 +7751,7 @@ function rangeScripts(fit, x, seed, B, src) {
      mirror image's c above bottom (the lower end of the largest value's
      range, or the largest value plus that thousandth). */
   var bootNote = cut
-    ? 'Each resample is drawn from the cut model and refitted cut off at zero; the page also\n' +
+    ? 'Each resample is drawn from the truncated model and refitted truncated below zero; the page also\n' +
       'tries the model held at 0 and keeps the better, which this script leaves out.'
     : 'The classical p-value does not apply; the bootstrap below records each resample the\n' +
       'same way and refits it the same way.';
@@ -7711,8 +7763,9 @@ function rangeScripts(fit, x, seed, B, src) {
   var lit = function (v) { return v.map(function (q) { return P(q); }).join(', '); };
   out.r = head('#') + keptNote('#') + src1('#') +
     'x <- ' + (xr || 'read.csv("input-analyzer-data.csv", comment.char = "#")$value   # use the CSV download button') + '\n\n' +
-    (rc ? 'h <- ' + num(rc.h) + '; a <- ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' : '') +
-    (cut ? 'cut_max <- ' + cap + '   # the most of the model that may be cut off\n' : '') +
+    (rc ? 'h <- ' + num(rc.h) + '   # ' + spanNote + '\n' +
+          'lo_of <- function(u) ' + ends('h')[0] + '; hi_of <- function(u) ' + ends('h')[1] + '\n' : '') +
+    (cut ? 'cut_max <- ' + cap + '   # the most of the model that truncation may remove\n' : '') +
     '# The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th[' + S + '] the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
     'cdf0 <- function(z, th) ' + F.r[0] + '\n' +
     'q0 <- function(u, th) ' + F.r[1] + '\n' +
@@ -7722,7 +7775,7 @@ function rangeScripts(fit, x, seed, B, src) {
      : hasS ? 'cdf <- function(q, th) cdf0(q - th[' + S + '], th)\nqf <- function(u, th) th[' + S + '] + q0(u, th)\n' +
             (rc ? '' : 'dens <- function(q, th) d0(q - th[' + S + '], th)\n')
      : 'cdf <- cdf0\nqf <- q0\n' + (rc ? '' : 'dens <- d0\n')) +
-    (cut ? '# Cut off at zero: the CDF and quantile of the model given that it is at or above 0.\n' +
+    (cut ? '# Truncated below zero: the CDF and quantile of the model given that it is at or above 0.\n' +
            'cdfc <- function(q, th) { m <- cdf(0, th); pmax(0, (cdf(pmax(q, 0), th) - m) / (1 - m)) }\n' +
            'qc <- function(u, th) { m <- cdf(0, th); qf(m + (1 - m) * u, th) }\n'
          : 'cdfc <- cdf\nqc <- qf\n') + '\n' +
@@ -7736,8 +7789,8 @@ function rangeScripts(fit, x, seed, B, src) {
       onLog.map(function (b) { return b ? 'TRUE' : 'FALSE'; }).join(', ') + '); est_s <- ' + (estS ? 'TRUE' : 'FALSE') + '\n' +
     (rc ? 'cells <- function(v) {\n' +
           '  tb <- table(v); u <- as.numeric(names(tb))\n' +
-          '  list(lo = u + a, hi = u + a + h, n = as.vector(tb), N = length(v),\n' +
-          '       hi_s = ' + (cut ? '0' : 'min(u) + a + h') + ', lo_s = max(u) + a)\n' +
+          '  list(lo = lo_of(u), hi = hi_of(u), n = as.vector(tb), N = length(v),\n' +
+          '       hi_s = ' + (cut ? '0' : 'hi_of(min(u))') + ', lo_s = lo_of(max(u)))\n' +
           '}\n'
         : 'cells <- function(v) {\n' +
           '  r <- max(v) - min(v)\n' +
@@ -7786,9 +7839,9 @@ function rangeScripts(fit, x, seed, B, src) {
           '# the top of v\'s range.\n' + bn('#') +
           'Dstat <- function(v, th) {\n' +
           '  tb <- table(v); u <- as.numeric(names(tb)); e <- cumsum(as.vector(tb)) / length(v)\n' +
-          '  max(abs(e - cdfc(u + a + h, th)), abs(c(0, head(e, -1)) - cdfc(u + a, th)))\n' +
+          '  max(abs(e - cdfc(hi_of(u), th)), abs(c(0, head(e, -1)) - cdfc(lo_of(u), th)))\n' +
           '}\n'
-        : '# K-S D against the cut model. The classical p-value does not apply.\n' + bn('#') +
+        : '# K-S D against the truncated model. The classical p-value does not apply.\n' + bn('#') +
           'Dstat <- function(v, th) {\n' +
           '  v <- sort(v); n <- length(v); Fv <- cdfc(v, th)\n' +
           '  max(seq_len(n) / n - Fv, Fv - (seq_len(n) - 1) / n)\n' +
@@ -7813,8 +7866,9 @@ function rangeScripts(fit, x, seed, B, src) {
     'import numpy as np\nfrom scipy import stats, optimize\n\n' +
     (xp ? 'x = ' + xp : 'with open("input-analyzer-data.csv") as fh:   # use the CSV download button\n' +
                        '    x = np.array([float(ln.split(",")[1]) for ln in fh if ln[:1].isdigit()])') + '\n\n' +
-    (rc ? 'h, a = ' + num(rc.h) + ', ' + num(a) + '   # a recorded v stands for [v + a, v + a + h]\n' : '') +
-    (cut ? 'cut_max = ' + cap + '   # the most of the model that may be cut off\n' : '') +
+    (rc ? 'h = ' + num(rc.h) + '   # ' + spanNote + '\n' +
+          'def lo_of(u):\n    return ' + ends('h')[0] + '\ndef hi_of(u):\n    return ' + ends('h')[1] + '\n' : '') +
+    (cut ? 'cut_max = ' + cap + '   # the most of the model that truncation may remove\n' : '') +
     '# The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th[' + np + '] the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
     'def base(th):\n    return ' + F.py + '\n' +
     (refl ? 'def cdf(q, th):\n    return base(th).sf(th[' + np + '] - q)\ndef qf(u, th):\n    return th[' + np + '] - base(th).ppf(1 - u)\n' +
@@ -7823,7 +7877,7 @@ function rangeScripts(fit, x, seed, B, src) {
               'def logdens(q, th):\n    return base(th).logpdf(q - th[' + np + '])\n'
      : 'def cdf(q, th):\n    return base(th).cdf(q)\ndef qf(u, th):\n    return base(th).ppf(u)\n' +
        'def logdens(q, th):\n    return base(th).logpdf(q)\n') +
-    (cut ? '# Cut off at zero: the CDF and quantile of the model given that it is at or above 0.\n' +
+    (cut ? '# Truncated below zero: the CDF and quantile of the model given that it is at or above 0.\n' +
            'def cdfc(q, th):\n    m = cdf(0.0, th)\n    return np.maximum(0.0, (cdf(np.maximum(q, 0.0), th) - m) / (1 - m))\n' +
            'def qc(u, th):\n    m = cdf(0.0, th)\n    return qf(m + (1 - m) * u, th)\n'
          : 'cdfc, qc = cdf, qf\n') + '\n' +
@@ -7834,7 +7888,7 @@ function rangeScripts(fit, x, seed, B, src) {
       ']; est_s = ' + (estS ? 'True' : 'False') + '\n' +
     (rc ? 'def cells(v):\n' +
           '    u, cnt = np.unique(v, return_counts=True)\n' +
-          '    return dict(lo=u + a, hi=u + a + h, n=cnt, N=len(v), hi_s=' + (cut ? '0.0' : 'u[0] + a + h') + ', lo_s=u[-1] + a)\n'
+          '    return dict(lo=lo_of(u), hi=hi_of(u), n=cnt, N=len(v), hi_s=' + (cut ? '0.0' : 'hi_of(u[0])') + ', lo_s=lo_of(u[-1]))\n'
         : 'def cells(v):\n' +
           '    r = np.max(v) - np.min(v)\n' +
           '    return dict(x=np.asarray(v, dtype=float), N=len(v), hi_s=min(0.0, np.min(v) - 1e-3 * r), lo_s=np.max(v) + 1e-3 * r)\n') +
@@ -7884,9 +7938,9 @@ function rangeScripts(fit, x, seed, B, src) {
           '# the top of v\'s range.\n' + bn('#') +
           'def Dstat(v, th):\n' +
           '    u, cnt = np.unique(v, return_counts=True); e = np.cumsum(cnt) / len(v)\n' +
-          '    return max(np.max(np.abs(e - cdfc(u + a + h, th))),\n' +
-          '               np.max(np.abs(np.concatenate(([0.0], e[:-1])) - cdfc(u + a, th))))\n'
-        : '# K-S D against the cut model. The classical p-value does not apply.\n' + bn('#') +
+          '    return max(np.max(np.abs(e - cdfc(hi_of(u), th))),\n' +
+          '               np.max(np.abs(np.concatenate(([0.0], e[:-1])) - cdfc(lo_of(u), th))))\n'
+        : '# K-S D against the truncated model. The classical p-value does not apply.\n' + bn('#') +
           'def Dstat(v, th):\n' +
           '    v = np.sort(v); n = len(v); Fv = cdfc(v, th); i = np.arange(1, n + 1)\n' +
           '    return max(np.max(i / n - Fv), np.max(Fv - (i - 1) / n))\n') +
@@ -7909,7 +7963,7 @@ function rangeScripts(fit, x, seed, B, src) {
   var xm = dataLiteral(x, 'matlab');
   /* A Pearson type VI run off to its gamma limit has a first shape near
      1e9, where MATLAB's betainc parts from R's pbeta, SciPy's betainc, and
-     this page (by 0.08 in the log-likelihood on the phone menu sample). */
+     this page (by 0.08 in the log-likelihood on the phone IVR sample). */
   var mOff = d.key === 'pearson6' && !!fit.edge;
   function mRep(lb, expr, page, tol) {
     return mOff ? "fprintf('%-28s %14.7g   page %14.7g\\n', '" + lb + "', " + expr + ', ' + P(page) + ');\n'
@@ -7919,9 +7973,10 @@ function rangeScripts(fit, x, seed, B, src) {
     '% Needs the Statistics and Machine Learning Toolbox.\n' +
     (xm ? 'x = ' + xm + "';" : 'x = readmatrix("input-analyzer-data.csv");   % use the CSV download button\n' +
                                 'x = x(:, 2);                                 % column 1 is the row index') + '\n\n' +
-    (rc ? 'M.h = ' + num(rc.h) + '; M.a = ' + num(a) + ';   % a recorded v stands for [v + a, v + a + h]\n' : '') +
+    (rc ? 'M.h = ' + num(rc.h) + ';   % ' + spanNote.replace('lo_of(v), hi_of(v)', 'M.lo(v), M.hi(v)') + '\n' +
+          'M.lo = @(u) ' + ends(num(rc.h))[0] + '; M.hi = @(u) ' + ends(num(rc.h))[1] + ';\n' : '') +
     'M.rec = ' + (rc ? 'true' : 'false') + '; M.cut = ' + (cut ? 'true' : 'false') + '; M.cutMax = ' + cap +
-      ';   % the most of the model that may be cut off\n' +
+      ';   % the most of the model that truncation may remove\n' +
     '% The ' + distLower(d) + ' with the page\'s parameters th' + (hasS ? ', and th(' + S + ') the ' + (refl ? 'right end c' : 'shift') : '') + '.\n' +
     'cdf0 = @(z, th) ' + F.m[0] + ';\n' +
     'q0 = @(u, th) ' + F.m[1] + ';\n' +
@@ -7931,7 +7986,7 @@ function rangeScripts(fit, x, seed, B, src) {
      : hasS ? 'M.cdf = @(q, th) cdf0(q - th(' + S + '), th);\nM.qf = @(u, th) th(' + S + ') + q0(u, th);\n' +
             (rc ? '' : 'M.dens = @(q, th) d0(q - th(' + S + '), th);\n')
      : 'M.cdf = cdf0;\nM.qf = q0;\n' + (rc ? '' : 'M.dens = d0;\n')) +
-    (cut ? '% Cut off at zero: the CDF and quantile of the model given that it is at or above 0.\n' +
+    (cut ? '% Truncated below zero: the CDF and quantile of the model given that it is at or above 0.\n' +
            'M.cdfc = @(q, th) max(0, (M.cdf(max(q, 0), th) - M.cdf(0, th)) / (1 - M.cdf(0, th)));\n' +
            'M.qc = @(u, th) M.qf(M.cdf(0, th) + (1 - M.cdf(0, th)) * u, th);\n'
          : 'M.cdfc = M.cdf;\nM.qc = M.qf;\n') + '\n' +
@@ -7954,7 +8009,7 @@ function rangeScripts(fit, x, seed, B, src) {
     (rc ? '% K-S D of the recorded values against the distribution of a recorded\n' +
           '% value: the chance of recording v or less is the model\'s probability up to\n' +
           '% the top of v\'s range.\n'
-        : '% K-S D against the cut model. The classical p-value does not apply.\n') + bn('%') +
+        : '% K-S D against the truncated model. The classical p-value does not apply.\n') + bn('%') +
     'Dobs = Dstat(x, th, M);\n' +
     mRep('K-S D', 'Dobs', D, '1e-4') + '\n' +
     (rc ? 'rec = @(v) ' + recExpr('m') + ';\n' : '') +
@@ -7973,8 +8028,8 @@ function rangeScripts(fit, x, seed, B, src) {
     '  v = v(:); C.N = numel(v);\n' +
     '  if M.rec\n' +
     '    [u, ~, j] = unique(v); C.n = accumarray(j, 1);\n' +
-    '    C.lo = u + M.a; C.hi = u + M.a + M.h; C.loS = u(end) + M.a;\n' +
-    '    if M.cut, C.hiS = 0; else, C.hiS = u(1) + M.a + M.h; end\n' +
+    '    C.lo = M.lo(u); C.hi = M.hi(u); C.loS = M.lo(u(end));\n' +
+    '    if M.cut, C.hiS = 0; else, C.hiS = M.hi(u(1)); end\n' +
     '  else\n' +
     '    r = max(v) - min(v); C.x = v; C.hiS = min(0, min(v) - 1e-3 * r); C.loS = max(v) + 1e-3 * r;\n' +
     '  end\n' +
@@ -8023,7 +8078,7 @@ function rangeScripts(fit, x, seed, B, src) {
     'function D = Dstat(v, th, M)\n' +
     '  if M.rec\n' +
     '    [u, ~, j] = unique(v(:)); e = cumsum(accumarray(j, 1)) / numel(v);\n' +
-    '    D = max([abs(e - M.cdfc(u + M.a + M.h, th)); abs([0; e(1:end - 1)] - M.cdfc(u + M.a, th))]);\n' +
+    '    D = max([abs(e - M.cdfc(M.hi(u), th)); abs([0; e(1:end - 1)] - M.cdfc(M.lo(u), th))]);\n' +
     '  else\n' +
     '    v = sort(v(:)); n = numel(v); Fv = M.cdfc(v, th); i = (1:n)\';\n' +
     '    D = max([i / n - Fv; Fv - (i - 1) / n]);\n' +
@@ -9979,7 +10034,7 @@ function nortaSimQuantile(fit, tool, Z, U) {
     var rc = nortaSimQuantile(Object.assign({}, fit, { cut: null }), tool, Z,
                               '(1 - ' + plainProb(1 - fit.cutMass) + '*(1 - ' + U + '))');
     return rc.expr && rc.u ? { expr: S.max + '(0, ' + rc.expr + ')', u: true, note: rc.note }
-      : { expr: null, why: 'the ' + distLower(fit.dist) + ' cut off at zero needs the inverse of the normal CDF' };
+      : { expr: null, why: 'the ' + distLower(fit.dist) + ' truncated below zero needs the inverse of the normal CDF' };
   }
   if (fit.reflect) {
     var r = nortaSimQuantile(Object.assign({}, fit, { shift: 0, reflect: false }), tool, '(-' + Z + ')', '(1 - ' + U + ')');
@@ -10336,7 +10391,7 @@ function toCsv(rows) {
    ───────────────────────────────────────────────────────────────────── */
 var IA = {
   MRG32k3a: MRG32k3a,
-  recordingRec: recordingRec, rescoreBins: rescoreBins, gofCdf: gofCdf, recLow: recLow, recCells: recCells, cellLogLik: cellLogLik, flipRec: flipRec,
+  recordingRec: recordingRec, rescoreBins: rescoreBins, gofCdf: gofCdf, recSpan: recSpan, zeroOnGrid: zeroOnGrid, cdfBelow: cdfBelow, recCells: recCells, cellLogLik: cellLogLik, flipRec: flipRec,
   INTERVAL_STEP_SD: INTERVAL_STEP_SD,
   CUT_KEYS: CUT_KEYS, CUT_DEEP: CUT_DEEP, fitCut: fitCut, isCut: isCut,
   logGamma: logGamma, logBeta: logBeta,
@@ -10443,10 +10498,40 @@ var SAMPLES = {
     5.36,6.41,2.71,4.47,3.91,2.75,4.11,2.32,4.91,2.92,3.94,4.88,4.45,3.89,3.07,4.55,3.41,5.28,
     3.36,4.02,1.93,3.87,2.52,2.95,4.62,5.6,2.94,3.48,5.7,3.21
   ] },
+  /* Recorded to the half minute: not whole numbers, and so read as
+     measurements at once, on a step coarse enough (0.22 of the SD) that each
+     value is fitted as the range it was rounded from. */
+  setup: { name: "Machine setup times (nearest half minute)",
+    unit: "minutes to set up a machine for a new job, recorded to the nearest half minute", v: [
+    11,2.5,4.5,7.5,3.5,5.5,4,4.5,7.5,4.5,2.5,5,6,11.5,4.5,2.5,8.5,9.5,3.5,3,4.5,3,3.5,4,
+    7,8,3,9,11.5,3,3.5,4,5.5,7.5,4,11.5,7.5,6,5,5,5.5,3,5.5,3,11.5,4,5.5,5.5,
+    6,5.5,4,8.5,7,7.5,7.5,5.5,3,3.5,8,5.5,5,6,5,3.5,4.5,7,3.5,8,5,5,5,9.5,
+    4,5,5.5,6,7,3,4,7,6,5.5,6.5,4.5,7,5,6,4,4.5,4,12.5,4,3.5,7,3,6,
+    7.5,3.5,7.5,7,4.5,6,4,4,5,2,4,8.5,4.5,9.5,4,6.5,4.5,4.5,6.5,4.5,11,3.5,5,4.5
+  ] },
+  /* A normal(1, 1.2) truncated below zero, to two decimals. Truncating each
+     candidate below zero ranks the normal first by AIC; in the default mode
+     it ranks fourth, and the best fit is a PERT. */
+  wear: { name: "Tool wear per shift (microns)",
+    unit: "microns a cutting tool wears down in one shift, which can never be negative",
+    hint: 'To fit models truncated below zero, choose <strong>by truncating each below zero</strong> under ' +
+          '<strong>Keep models at or above zero</strong> in section 2, and compare the ranking with the default.',
+    v: [
+    0.93,0.67,0.75,1.99,0.38,2.69,2.79,1.71,1.4,0.29,2.18,2.2,1.28,1.32,1.09,1.98,4.6,1.7,
+    0.06,1.44,0.05,1.15,1.59,0.36,1.59,1.44,2.23,3.67,2.7,0.33,3.11,2.69,1.54,1.13,0.48,1.66,
+    2.02,1.1,1.58,1.44,1.46,1.14,0.19,1.51,2.8,0.01,3.05,0.63,2.22,0.47,2.35,1.67,3.32,2.23,
+    1.58,1.83,1.38,2.05,1.28,1.88,2.32,0.28,0.51,1.5,1.82,1.68,1.82,1.47,1.37,1.77,0.07,2.76,
+    0.78,2.46,1.34,1.76,2.26,1.68,1.69,1.08,2.39,2.09,1.39,1.57,0.41,3.21,1.88,1.64,3.19,1.58,
+    0.53,0.66,1.93,0.32,0.24,1,0.96,3.83,1.85,1.03,1.2,1.34,1.58,0.74,0.8,0.71,2.83,3.12,
+    0.45,1.61,3.01,1.94,1.48,0.19,0.51,2.02,1.8,2.28,0.35,1.64,2.9,1.79,2.26,1.42,0.67,0.73,
+    1.93,0.76,0.78,2.61,1.12,2.47,0.66,1.02,0.1,0.69,3.72,1.49,2.09,0.58,1.74,0.52,1.45,1.84,
+    0.17,0.93,1.95,1.43,2.64,0.92
+  ] },
   /* Recorded to the whole second, and so tied: the page reads these as
-     counts until Family is set to Continuous, which is the lesson. */
-  ivr: { name: "Phone menu times (whole seconds)",
-    unit: "seconds a caller spends in an automated phone menu, recorded to the whole second", v: [
+     counts until Family is set to Continuous, and then fits each value as
+     the range it was rounded from. */
+  ivr: { name: "Phone IVR service times (whole seconds)",
+    unit: "seconds a caller spends in an automated phone menu (an IVR, the “press 1 for billing” kind), recorded to the whole second", v: [
     13,5,7,15,10,8,6,11,6,9,7,7,5,12,13,9,6,12,11,7,8,9,12,9,6,10,12,9,12,6,
     7,6,6,6,6,7,10,11,8,6,6,11,6,7,7,7,9,12,7,7,8,9,17,6,9,6,8,14,8,9,
     10,9,8,6,12,6,10,9,7,12,10,9,7,12,6,13,6,5,8,8,7,8,12,6,8,7,8,11,11,8,
@@ -11413,20 +11498,19 @@ function renderStats() {
   set('st-max', fmt(s.max));
 
   var msg;
-  if (isCountData(s)) {
-    msg = '<strong>These look like counts.</strong> Every value is a whole number at or above zero, ' +
-      'and ' + s.nUnique + ' distinct values among ' + s.n + ' repeat the way counts do, and so ' +
-      '<em>Choose for me</em> fits the discrete candidates. ' +
-      (s.min >= 2
-        ? 'The smallest value is ' + s.min + '. Counts with a large mean can have a floor like that, ' +
-          'and so can times with a fixed delay before their variable part begins. If these are times ' +
-          'or other measurements recorded to whole units, set <em>Family</em> to <em>Continuous</em> ' +
-          'and keep the location shift, which fits that delay.'
-        : 'If they are measurements recorded to whole units instead, set <em>Family</em> to ' +
-          '<em>Continuous</em>; continuous fits are a reasonable approximation to counts once the ' +
-          'counts get large.' +
-          (s.min === 1 ? ' None of the values is 0. If the count can never be 0 (the items in a ' +
-                         'batch, say), tick <em>Smallest possible value is 1</em>.' : ''));
+  var rcNow = recAvail();
+  if (isCountData(s) && ST.family === 'continuous') {
+    msg = '<strong>Fitted as measurements.</strong> Every value is a whole number, which usually means ' +
+      'counts, but <em>Family</em> is set to <em>Continuous</em>' +
+      (rcNow ? ', and so each value is fitted as the range it was rounded from (set under ' +
+               '<strong>Values were</strong> in section 2).' : '.');
+  } else if (isCountData(s)) {
+    msg = '<strong>These look like counts:</strong> ' + s.nUnique + ' distinct whole numbers among ' + s.n +
+      ' values, and so the discrete candidates are fitted. If they are times or other measurements ' +
+      'recorded to whole units, set <em>Family</em> to <em>Continuous</em>' +
+      (s.min >= 2 ? ' and keep the location shift, which fits a delay before their variable part begins.' : '.') +
+      (s.min === 1 ? ' If the count can never be 0 (the items in a batch, say), tick ' +
+                     '<em>Smallest possible value is 1</em>.' : '');
   } else if (isFewValues(s)) {
     msg = '<strong>These look like a few distinct outcomes.</strong> The ' + s.n + ' observations take ' +
       'only ' + s.nUnique + ' distinct value' + (s.nUnique === 1 ? '' : 's') + ', each seen ' +
@@ -11457,7 +11541,11 @@ function renderStats() {
         s.n + ' are more than counts this size would take. If they are counts, set <em>Family</em> ' +
         'to <em>Discrete</em>.';
     }
-    if (s.nUnique < s.n * 0.5) {
+    if (rcNow) {
+      msg += ' <strong>The values were rounded when they were recorded:</strong> they sit on a step of ' +
+        IA.num(rcNow.h) + ', coarse against their spread, and so each is fitted as the range it was ' +
+        'rounded from (set under <strong>Values were</strong> in section 2).';
+    } else if (s.nUnique < s.n * 0.5) {
       msg += ' <strong>Many values repeat</strong> (' + s.nUnique + ' distinct out of ' + s.n +
         '), which usually means the data were rounded when they were recorded. That is fine for fitting, ' +
         'but it inflates the K–S and A–D statistics; read their bootstrap p-values rather than ' +
@@ -11474,7 +11562,13 @@ function renderStats() {
       '<span class="mono">c − X</span> instead.';
   }
   $('data-kind').innerHTML =
-    (ST.unit ? '<div style="margin-bottom:6px">These are ' + esc(ST.unit) + '.</div>' : '') + msg;
+    (ST.unit ? '<div style="margin-bottom:6px">These are ' + esc(ST.unit) + '.' + sampleHint(ST.unit) + '</div>' : '') + msg;
+}
+/* A built-in sample's pointer to the setting it was made to show, found by
+   its description. */
+function sampleHint(unit) {
+  for (var k in SAMPLES) if (SAMPLES[k].unit === unit && SAMPLES[k].hint) return ' ' + SAMPLES[k].hint;
+  return '';
 }
 
 /* Every distinct value with its count, its share, and the share at or
@@ -11724,15 +11818,24 @@ function syncRecPick() {
   if (!r) return;
   var h = IA.num(r.h), o = $('rec-pick').options;
   o[0].textContent = 'rounded to the nearest ' + h;
-  o[1].textContent = 'rounded down to ' + h + ' (truncated)';
+  o[1].textContent = 'rounded down to ' + h;
   o[2].textContent = 'rounded up to ' + h;
+  o[3].textContent = 'truncated to ' + h;
+  /* Truncation moves values toward 0, and so it needs 0 on the step's grid. */
+  var tOk = IA.zeroOnGrid(r);
+  o[3].hidden = o[3].disabled = !tOk;
+  if (!tOk && ST.recKind === 'trunc') ST.recKind = 'nearest';
   $('rec-pick').value = ST.recKind;
   setTip($('rec-tip'), 'Your values sit on a step of ' + h + ', which is ' + fmt(r.stepSd, 2) +
     ' of their standard deviation, and so each one stands for a range of true values: a value recorded ' +
     'as v was between v − ' + IA.num(r.h / 2) + ' and v + ' + IA.num(r.h / 2) + ' if rounded to the nearest ' +
-    h + ', between v and v + ' + h + ' if rounded down, and between v − ' + h + ' and v if rounded up. ' +
-    'Each continuous candidate is fitted to the probability it gives those ranges. Truncating drops the ' +
-    'digits past the step, which rounds a positive value down and a negative one up. Choose recorded ' +
+    h + ', between v and v + ' + h + ' if rounded down, ' +
+    (tOk
+      ? 'between v − ' + h + ' and v if rounded up, and, if truncated (the digits past the step dropped, ' +
+        'which moves every value toward 0), between v and v + ' + h + ' above 0, between v − ' + h +
+        ' and v below 0, and between −' + h + ' and ' + h + ' at 0. '
+      : 'and between v − ' + h + ' and v if rounded up. ') +
+    'Each continuous candidate is fitted to the probability it gives those ranges. Choose recorded ' +
     'exactly to fit each value as written, as most fitting tools do.');
 }
 function activeKeys() {
@@ -11990,10 +12093,10 @@ function renderRanking() {
          r.fit.atBound ? '<span class="rank-sub">' + (r.fit.reflect ? 'c sits at the largest observation'
                                                     : 'shift sits at the smallest observation') + '</span>' :
          r.fit.edge ? tipSpan('rank-sub', 'close to its ' + EDGE_NAME[r.fit.edge] + ' limit', edgeTip(r.fit.edge, r.key)) :
-         r.fit.cutForZero ? tipSpan('rank-sub', 'cut off at zero', 'A value is exactly 0, which this family ' +
-           'cannot produce with its start held at 0, and so this row is cut off at zero instead.') :
-         r.fit.cutLimit ? tipSpan('rank-sub', 'cut at its limit', 'This fit cuts off as much of the model as ' +
-           'is allowed, and the likelihood was still rising; the fit details say more.') :
+         r.fit.cutForZero ? tipSpan('rank-sub', 'truncated below zero', 'A value is exactly 0, which this family ' +
+           'cannot produce with its start held at 0, and so this row is truncated below zero instead.') :
+         r.fit.cutLimit ? tipSpan('rank-sub', 'truncated at its limit', 'This fit removes as much of the model ' +
+           'as truncation is allowed to, and the likelihood was still rising; the fit details say more.') :
          (near = nearSpecialCase(r, ST.rows)) ? tipSpan('rank-sub', near.label, near.tip) :
          r.fit.reflect ? '<span class="rank-sub">mirrored: c − X</span>' : '') +
       '</td>' +
@@ -12222,7 +12325,7 @@ function renderFit() {
       'shift');
   }
   if (IA.isCut(f)) {
-    add('cut &nbsp;<span class="p-what">at zero</span>', '0',
+    add('truncated &nbsp;<span class="p-what">below zero</span>', '0',
       'the smallest value the model can produce: the ' + fmt(100 * f.cutMass, 3) + '% of the model below 0 ' +
       'is removed and the rest scaled up to make up for it (set, not estimated)', null);
   }
@@ -12373,11 +12476,17 @@ function renderFit() {
 function rangeFitNote(r) {
   var f = r.fit;
   if (!f.rec || r.noCriteria) return '';
-  var rc = f.rec, h = IA.num(rc.h), lo = rc.kind === 'down' ? 0 : rc.kind === 'up' ? -rc.h : -rc.h / 2;
-  var v = ST.s.min, how = rc.kind === 'down' ? 'rounded down' : rc.kind === 'up' ? 'rounded up' : 'rounded to the nearest ' + h;
+  var rc = f.rec, h = IA.num(rc.h);
+  var v = ST.s.min, sp = IA.recSpan(rc, v);
+  var how = rc.kind === 'down' ? 'rounded down' : rc.kind === 'up' ? 'rounded up'
+          : rc.kind === 'trunc' ? 'truncated' : 'rounded to the nearest ' + h;
   var out = '<div class="note quiet"><strong>Fitted to the ranges your values stand for.</strong> ' +
     'Your values sit on a step of ' + h + ', ' + how + ' (set under <strong>Values were</strong>), and so a ' +
-    'recorded ' + IA.num(v) + ' stands for anything from ' + IA.num(v + lo) + ' to ' + IA.num(v + lo + rc.h) +
+    'recorded ' + IA.num(v) + ' stands for anything from ' + IA.num(sp[0]) + ' to ' + IA.num(sp[1]) +
+    (rc.kind !== 'trunc' ? ''
+      : v === 0 ? ' (truncation moves every value toward 0, and so a recorded 0 covers two steps)'
+      : ' (truncation moves every value toward 0, and so a recorded 0 stands for anything from ' +
+        IA.num(-rc.h) + ' to ' + h + ')') +
     '. The estimates come from the probability the model gives each of those ranges, not from its ' +
     'density at the recorded values, and the log-likelihood, AIC, and BIC are sums of those ' +
     'probabilities\' logarithms. They compare fairly across the candidates here, but not with a fit ' +
@@ -12407,20 +12516,20 @@ function cutNote(r) {
     : 'its left tail runs below 0';
   var out = '<div class="note quiet">';
   if (f.cutForZero) {
-    out += '<strong>Cut off at zero because a value is exactly 0.</strong> With its ' +
+    out += '<strong>Truncated below zero because a value is exactly 0.</strong> With its ' +
       (shifted ? 'start' : d.params[mp].name) + ' held at 0, a ' + distLower(d) + ' cannot produce a value of ' +
-      'exactly 0, and so this row is cut off at zero instead: ' + where + ', and ';
+      'exactly 0, and so this row is truncated below zero instead: ' + where + ', and ';
   } else {
-    out += '<strong>Cut off at zero.</strong> Here ' + where + ', and ';
+    out += '<strong>Truncated below zero.</strong> Here ' + where + ', and ';
   }
   out += 'the ' + fmt(100 * f.cutMass, 3) + '% of the model below 0 is removed and the rest scaled up to make ' +
     'up for it, and so it never produces a negative value. The parameters above describe the model before ' +
-    'the cut; the model mean and median are those after it.';
+    'truncation; the model mean and median are those after it.';
   if (f.cutLimit) {
     out += ' This fit stopped at the limit of ' + (IA.CUT_DEEP.indexOf(d.key) < 0 ? 'half' : '99.9%') +
-      ' of the model cut off, and the likelihood was still rising there.' +
+      ' of the model removed, and the likelihood was still rising there.' +
       (d.key === 'normal' || d.key === 'johnsonSU'
-        ? ' Cut that deeply, a ' + distLower(d) + ' is practically an exponential, and the exponential row ' +
+        ? ' Truncated that deeply, a ' + distLower(d) + ' is practically an exponential, and the exponential row ' +
           'fits that shape directly.' : '');
   }
   if (shifted || d.key === 'beta') {
@@ -12448,7 +12557,7 @@ function belowZeroNote(r) {
   var below = IA.fitCdf(f)(0);
   if (!(below >= 1e-4)) return '';
   var pct = below * 100;
-  var cutIt = '<strong>by cutting each off at zero</strong> under <strong>Keep models at or above zero</strong>';
+  var cutIt = '<strong>by truncating each below zero</strong> under <strong>Keep models at or above zero</strong>';
   var how = f.reflect
     ? 'A mirrored model always runs below zero. Choose ' + cutIt + ' to remove that part.'
     : ST.zero === 'allow'
@@ -12860,7 +12969,7 @@ function paramGloss(key, i, f) {
     return 'held at 0 by <strong>Keep models at or above zero</strong>, the lowest it may go, and so not ' +
       'counted as a parameter';
   if (IA.isCut(f) && IA.DISTS[key].minParam === i && f.p[i] < 0)
-    base += '; it lies below 0, and the cut at 0 removes the part of the model below 0';
+    base += '; it lies below 0, and truncation at 0 removes the part of the model below 0';
   if (f.reflect && i === 0 && key === 'expo') return 'mean of the exponential part, measured down from c';
   /* A mirrored model's density starts at c, not at zero. */
   if (f.reflect) return base.replace(/\bzero\b/g, 'c');
@@ -12876,9 +12985,9 @@ function derivedRows(d, f) {
   /* A cut model's mean and median are not the family's formulas, which
      describe the model before the cut. */
   if (IA.isCut(f)) {
-    out.push(['model mean', fmt(IA.fitMean(f), 5), 'after the cut; compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
+    out.push(['model mean', fmt(IA.fitMean(f), 5), 'after truncation; compare it with the sample mean of ' + fmt(ST.s.mean, 5)]);
     out.push(['model median', fmt(IA.fitQuantile(f)(0.5), 5),
-      'after the cut; compare it with the sample median of ' + fmt(ST.s.med, 5)]);
+      'after truncation; compare it with the sample median of ' + fmt(ST.s.med, 5)]);
     return out;
   }
   /* The model mean is the end point plus the unshifted mean, or, for a
@@ -13525,7 +13634,8 @@ function renderGof() {
           'neither the usual rules of thumb nor the table column applies here. ' +
           (tieGrid
             ? 'The bootstrap column is still the one to read: each resample is rounded ' +
-              (tieGrid.kind === 'down' ? 'down to a multiple of' : tieGrid.kind === 'up' ? 'up to a multiple of' : 'to the nearest') +
+              (tieGrid.kind === 'down' ? 'down to a multiple of' : tieGrid.kind === 'up' ? 'up to a multiple of'
+                : tieGrid.kind === 'trunc' ? 'toward 0 to a multiple of' : 'to the nearest') +
               ' <span class="mono">' + IA.num(tieGrid.h) + '</span>, the step your data are ' +
               'recorded to, before it is refitted, and so it has ties like yours.' +
               (coarse
@@ -13810,7 +13920,7 @@ function drawCDF() {
      against F at the top of its range, and the gap before it against F at
      the bottom, and so it is drawn there, on the curve. */
   var gx = ks.at;
-  if (f.rec) gx = ks.at + IA.recLow(f.rec) + (ks.sign > 0 ? f.rec.h : 0);
+  if (f.rec) gx = IA.recSpan(f.rec, ks.at)[ks.sign > 0 ? 1 : 0];
   var Fat = F(gx);
   var eLo = 0, eHi = 0;
   for (i = 0; i < n; i++) {
@@ -13984,7 +14094,7 @@ function renderExport() {
   var ex = IA.expressions(r.fit);
   var h = '<div class="plot-hd">One draw from the fitted ' + esc(distLower(r.dist)) +
           (r.fit.reflect ? ', mirrored as c − X' : r.fit.shift ? ', shift included' : '') +
-          (IA.isCut(r.fit) ? ', cut off at zero' : '') + '</div>';
+          (IA.isCut(r.fit) ? ', truncated below zero' : '') + '</div>';
   for (var i = 0; i < TOOLS.length; i++) {
     var key = TOOLS[i][0];
     if (!ex[key] && ex.notes[key]) {
@@ -18464,7 +18574,7 @@ document.addEventListener('DOMContentLoaded', function () {
     LOADER.useColumn(ST.col, 'Re-read as ' + (this.value === 'hm' ? 'HH:MM' : 'MM:SS'));
   });
   $('fam-pick').addEventListener('change', function () {
-    ST.family = this.value; ST.userPicked = false; refitAll();
+    ST.family = this.value; ST.userPicked = false; refitAll(); renderStats();
   });
   $('shift-chk').addEventListener('change', function () {
     ST.shift = this.checked; ST.shiftAutoOff = false;
@@ -18487,17 +18597,14 @@ document.addEventListener('DOMContentLoaded', function () {
     renderRanking(); renderFit(); renderBinPanel(); renderPlots(); renderExport(); renderGof();
   });
 
-  var sbtn = document.querySelectorAll('[data-sample]');
-  for (var s = 0; s < sbtn.length; s++) {
-    sbtn[s].addEventListener('click', function () {
-      var d = SAMPLES[this.getAttribute('data-sample')];
-      ST.genTruth = null; genSay('');
-      ST.unit = d.unit;          /* loadText keeps this when given a label */
-      ST.binAuto = true;
-      LOADER.loadText(d.table || d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"',
-        d.table ? { col: d.col, freq: { mode: 'count', out: 1 - d.col, unit: d.unit } } : undefined);
-    });
-  }
+  $('sample-load').addEventListener('click', function () {
+    var d = SAMPLES[$('sample-pick').value];
+    ST.genTruth = null; genSay('');
+    ST.unit = d.unit;          /* loadText keeps this when given a label */
+    ST.binAuto = true;
+    LOADER.loadText(d.table || d.v.join('\n'), d.name, 'built-in sample "' + d.name + '"',
+      d.table ? { col: d.col, freq: { mode: 'count', out: 1 - d.col, unit: d.unit } } : undefined);
+  });
 
   /* Bin slider. Everything downstream of the bins is recomputed on the
      spot, which is what makes the chi-square p-value and the square-error

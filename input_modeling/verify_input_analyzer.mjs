@@ -130,7 +130,9 @@ pending.roundRecGamma = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
 pending.roundRecLogn = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
   pool.run('roundCalib', { n: 100, B: CALIB_B, from, to, grid: true, key: 'lognormal', truth: [1.015, 0.5], rec: true })))
   .then(sumCounts);
-pending.cutNormal = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+pending.truncRec = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
+  pool.run('truncCalib', { n: 100, B: CALIB_B, from, to, truth: [0.5, 1.5], h: 0.5 }))).then(sumCounts);
+pending.cutNormal =Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
   pool.run('cutCalib', { n: 100, B: CALIB_B, from, to, key: 'normal', truth: [1, 2], g: 0, useShift: false })))
   .then(sumCounts);
 pending.cutGamma = Promise.all(chunks(CALIB_R, 20).map(([from, to]) =>
@@ -2168,6 +2170,92 @@ section('16d. fitting to recorded ranges');
          `A-D ${(100 * rA).toFixed(1)}% (nominal 5%, band +/-${(100 * band).toFixed(1)}%)`);
     }
   }
+
+  /* Truncated recordings: the digits past the step dropped, which moves
+     every value toward 0, and so a recorded v stands for [v, v + h] above 0,
+     [v - h, v] below it, and [-h, h] at 0. */
+  {
+    const tr = { h: 0.5, off: 0, dp: 1, kind: 'trunc' };
+    ok(['-1', '0', '1'].map(v => IA.recSpan(tr, Number(v)).join('..')).join(' ') === '-1.5..-1 -0.5..0.5 1..1.5',
+       'truncated, a recorded -1 stands for [-1.5, -1], a 0 for [-0.5, 0.5], and a 1 for [1, 1.5]');
+    ok([5.3, 5.7, -5.3, -0.4, 0.4].map(v => IA.snapToGrid(v, gk('trunc'))).join(',') === '5,5,-5,0,0',
+       'a resample is truncated toward 0');
+    ok(IA.flipRec(IA.recordingRec(s, 'trunc')).kind === 'trunc', 'a mirror image leaves truncation alone');
+    ok(IA.recordingRec(s, 'trunc').kind === 'trunc' && IA.recordingRec(IA.summarize(x.map(v => v + 0.5)), 'trunc').kind === 'nearest' &&
+       !IA.zeroOnGrid(IA.recordingGrid(x.map(v => v + 0.5).sort((a, b) => a - b))),
+       'truncation needs 0 on the grid: values on 5.5, 6.5, ... cannot have been truncated, and read as nearest');
+    /* Above 0, truncation is rounding down. */
+    const ftr = IA.fitDist(IA.DISTS.gamma, x, true, false, null, null, false, { floor0: true, rec: IA.recordingRec(s, 'trunc') });
+    ok(Math.abs(ftr.ll - fd.ll) < 1e-6 && Math.abs(ftr.shift - fd.shift) < 1e-4,
+       'on values all above 0, a truncated fit is the rounded-down fit');
+    /* A normal with values on both sides of 0. */
+    const errs = { trunc: [0, 0], down: [0, 0] }, R0 = 20;
+    let atZero = true, gofOk = true, last = null;
+    for (let rep = 0; rep < R0; rep++) {
+      const ut = IA.MRG32k3a(16450 + rep), xt = [];
+      for (let i = 0; i < 300; i++) xt.push(Math.trunc(IA.DISTS.normal.sample(ut, [0.8, 1.5])) || 0);
+      const st = IA.summarize(xt);
+      for (const kind of ['trunc', 'down']) {
+        const f = IA.fitDist(IA.DISTS.normal, xt, false, false, null, null, false, { rec: IA.recordingRec(st, kind) });
+        errs[kind][0] += (f.p[0] - 0.8) / R0; errs[kind][1] += (f.p[1] - 1.5) / R0;
+        if (kind === 'trunc') last = [f, xt];
+      }
+      /* The 0 range is two steps wide in the likelihood. */
+      const f = last[0], C = IA.recCells(xt, f.rec), j = C.c.findIndex((c, i) => C.edges[C.lo[i]] === -1);
+      if (!(j >= 0 && C.edges[C.hi[j]] === 1)) atZero = false;
+      /* The step CDF and its atoms agree on every grid point. */
+      const G = IA.gofCdf(f), A = IA.fitAtom(f), B0 = IA.cdfBelow(f);
+      for (const v of [-2, -1, 0, 1, 2]) {
+        if (Math.abs(G(v) - G(v - 1) - A(v)) > 1e-12 || Math.abs(B0(v) - G(v - 1)) > 1e-12) gofOk = false;
+      }
+    }
+    ok(atZero, 'a recorded 0 is fitted to the range [-1, 1], two steps wide');
+    ok(gofOk, 'the recorded-value CDF, its atoms, and the bins\' CDF agree on both sides of 0');
+    ok(Math.abs(errs.trunc[0]) < 0.06 && Math.abs(errs.trunc[1]) < 0.06 && errs.down[0] > 0.2,
+       `a normal(0.8, 1.5) truncated to whole numbers (300 values, ${R0} samples): fitted as truncated, mean errors ` +
+       `${errs.trunc[0].toFixed(3)} and ${errs.trunc[1].toFixed(3)}; fitted as rounded down, the mean is off by ${errs.down[0].toFixed(3)}`);
+    const [ft, xt] = last;
+    const neg = xt.map(v => -v || 0);
+    const fneg = IA.fitDist(IA.DISTS.normal, neg, false, false, null, null, false, { rec: IA.recordingRec(IA.summarize(neg), 'trunc') });
+    ok(Math.abs(fneg.p[0] + ft.p[0]) < 1e-4 && Math.abs(fneg.p[1] - ft.p[1]) < 1e-4 && Math.abs(fneg.ll - ft.ll) < 1e-6,
+       'truncation is symmetric about 0: the fit to -x is the fit to x reflected');
+
+    /* The scripts truncate their resamples and agree with the page. */
+    const ug = IA.MRG32k3a(16470), xg = [];
+    for (let i = 0; i < 200; i++) xg.push(Math.trunc(IA.DISTS.gamma.sample(ug, [2, 1.2]) * 2) / 2);
+    const recg = IA.recordingRec(IA.summarize(xg), 'trunc');
+    const fgz = IA.fitDist(IA.DISTS.gamma, xg, true, false, null, null, false, { floor0: true, rec: recg });
+    ok(fgz.ok && !IA.isCut(fgz) && fgz.shift === 0,
+       `kept at or above zero, a gamma on truncated values with ${xg.filter(v => v === 0).length} zeros is held at 0, not truncated`);
+    const st0 = IA.reproScripts(ft, xt, 7, 20);
+    ok(st0.r.includes('trunc(v)') && st0.python.includes('np.trunc(v)') && st0.matlab.includes('fix(v)'),
+       'truncated, the scripts truncate their resamples');
+    /* Past 250 values a script reads the page's CSV rather than embedding
+       the data, and so the run uses the first 200. */
+    const xt2 = xt.slice(0, 200);
+    const ft2 = IA.fitDist(IA.DISTS.normal, xt2, false, false, null, null, false,
+                           { rec: IA.recordingRec(IA.summarize(xt2), 'trunc') });
+    const truncRuns = [['normal on both sides of 0', ft2, xt2], ['gamma held at 0', fgz, xg],
+                       ['normal truncated below zero', IA.fitDist(IA.DISTS.normal, xg, false, false, null, null, false,
+                                                                 { floor0: true, cut0: true, rec: recg }), xg]];
+    for (const [what, f, data] of truncRuns) {
+      const sp = IA.reproScripts(f, data, 7, 20);
+      for (const [lang, cmd, args, ext, code] of [['R', 'Rscript', ['--vanilla'], 'R', sp.r], ['Python', 'python3', ['-I'], 'py', sp.python]]) {
+        const res = runScript(cmd, args, code, ext);
+        if (!res) { console.log(`  (skipped: ${lang} is not installed)`); continue; }
+        const agree = (res.out.match(/\bagrees\b/g) || []).length, differ = (res.out.match(/\bDIFFERS\b/g) || []).length;
+        ok(res.status === 0 && differ === 0 && agree >= 4,
+           `${lang} script for a ${what}, fitted to truncated recordings: ${agree} values agree with the page, ${differ} differ`,
+           res.out.slice(-600));
+      }
+    }
+
+    const R = CALIB_R, se = Math.sqrt(0.05 * 0.95 / R), band = 4 * se + 0.01;
+    const { rejD, rejA, used } = await pending.truncRec;
+    ok(Math.abs(rejD / used - 0.05) < band && Math.abs(rejA / used - 0.05) < band,
+       `normal(0.5, 1.5) truncated to 0.5 (n = 100), fitted to its ranges: K-S rejects ${(100 * rejD / used).toFixed(1)}%, ` +
+       `A-D ${(100 * rejA / used).toFixed(1)}% (nominal 5%, band +/-${(100 * band).toFixed(1)}%)`);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -2363,8 +2451,8 @@ section('16e. models cut off at zero');
     for (const [what, f, data] of scriptCases) {
       if (!IA.isCut(f)) { ok(false, `${what}: expected a cut fit for the script check`); continue; }
       const sp = IA.reproScripts(f, data, 7, 20);
-      ok(sp.r.includes('cut off at zero') && sp.python.includes('cut off at zero') && sp.matlab.includes('cut off at zero'),
-         `${what}: the scripts in all three languages say the model is cut off at zero`);
+      ok(sp.r.includes('truncated below zero') && sp.python.includes('truncated below zero') && sp.matlab.includes('truncated below zero'),
+         `${what}: the scripts in all three languages say the model is truncated below zero`);
       for (const [lang, cmd, args, ext, code] of [['R', 'Rscript', ['--vanilla'], 'R', sp.r], ['Python', 'python3', ['-I'], 'py', sp.python]]) {
         const res = runScript(cmd, args, code, ext);
         if (!res) { console.log(`  (skipped: ${lang} is not installed)`); continue; }

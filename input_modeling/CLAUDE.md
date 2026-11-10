@@ -164,8 +164,14 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      minimum exactly when the family can take a value of 0 there (the exponential). The fit card
      notes any continuous model that puts 0.01% or more of its draws below zero when no value is
      negative (`belowZeroNote`). A frequency table numbered by row can start at 1 (`ST.freq.out`
-     of −2). The Phone menu times sample is recorded to whole seconds: it loads as counts, and the
-     count note's floor sentence points to Continuous with the shift.*
+     of −2). Tab ①'s samples are one grouped menu (`#sample-pick` and its Load button): continuous
+     values measured exactly, continuous values rounded when recorded (Phone IVR service times,
+     whole seconds, and Machine setup times, to the half minute), continuous values best fit with
+     truncated distributions (Tool wear per shift, a normal(1, 1.2) truncated below zero, whose
+     `hint` names the setting that shows it), and discrete counts. The Phone IVR sample loads as
+     counts, its count note points to Continuous with the shift, and once Family is Continuous the
+     note says each value is fitted as the range it was rounded from (`renderStats` reruns when
+     Family changes).*
   10. *Values on a step of `INTERVAL_STEP_SD` (0.05) of the SD or more are fitted to the ranges
      they stand for (core section 7b, `opts.rec` from `recordingRec`): each continuous candidate,
      the empirical excepted, maximizes the grouped (interval-censored) likelihood by Nelder–Mead
@@ -173,13 +179,22 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      `FIT_HINT_SHIFT`), and its `ll`, AIC, and BIC are sums of log-probabilities. The likelihood
      is bounded, and so no range fit is `degenerate` or `atBound`, and its shift can land above the
      smallest recorded value (the fit card's `rangeFitNote` says why). "Values were" beside Family
-     (`ST.recKind`: nearest, down, up, or exact) appears only above the cutoff under a continuous
-     family; rounded down and up move each range by half a step, and the bootstrap rounds its
-     resamples the same way (`snapToGrid` reads `grid.kind`). The cutoff was measured on shifted
+     (`ST.recKind`: nearest, down, up, trunc, or exact) appears only above the cutoff under a
+     continuous family; rounded down and up move each range by half a step, and the bootstrap rounds
+     its resamples the same way (`snapToGrid` reads `grid.kind`). Truncated (the digits past the
+     step dropped, which moves every value toward 0), a recorded v stands for [v, v + h] above 0,
+     [v − h, v] below it, and [−h, h] at 0 (`recSpan`, which every range end goes through), and
+     so rounded down and truncated differ wherever a value is 0 or below; the option is offered
+     only when 0 is on the grid (`zeroOnGrid`). A range fit's starting fit is never cut for an
+     exact 0 (`inCut`): cut, it ran off to a start hundreds of units below 0, and the held range fit
+     then failed from there. Section 16d of the verify checks truncation's ranges, rounding, and
+     mirror image, recovers a normal(0.8, 1.5) truncated to whole numbers (mean errors near 0.01,
+     against 0.3 fitted as rounded down), runs the R and Python scripts, and measures the bootstrap
+     of a normal truncated to 0.5 (K–S 6.0%, A–D 4.5%, nominal 5%). The cutoff was measured on shifted
      gamma, lognormal, and Weibull fits at n = 150 against the true parameters: at 0.02 the two
      fits agree; from 0.05 the exact fit's errors grow (the gamma's by 9–16% at 0.05 and 30–50% at
-     0.1), and the range fit's stay at the unrounded data's. Every built-in continuous sample is
-     below 0.01 and fits exactly as before. `reproScripts` hands a range fit to `rangeScripts`, which
+     0.1), and the range fit's stay at the unrounded data's. Of the built-in samples, only the
+     two rounded when recorded reach the cutoff. `reproScripts` hands a range fit to `rangeScripts`, which
      writes each family's CDF and quantile in R, MATLAB, and Python, maximizes the same likelihood
      from the page's estimates, and prints each number beside the page's (estimates to three digits,
      the log-likelihood to six); a Pearson type VI run off to its gamma limit prints MATLAB's without
@@ -197,7 +212,8 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      slider rescores the square error (`rescoreBins`) rather than refitting. Timings: the verify's
      `vm` sandbox runs this code 20–50 times slower than a browser; on the page the whole ranking
      takes about 0.1 s and a 2000-resample bootstrap of a range fit about a second.*
-  11. *With `cut0`, a continuous candidate is cut off at zero (core section 7c, `fitCut`): its
+  11. *With `cut0`, a continuous candidate is cut off at zero (core section 7c, `fitCut`; the page
+     says "truncated below zero" wherever a reader sees it, and the code says cut): its
      start, minimum, or the normal's left tail may lie below 0, the part below 0 is removed, and
      the rest is scaled up, F_cut(v) = (F(v) − F(0)) / (1 − F(0)). The cut is stored as `fit.cut`
      (the bound, 0) and `fit.cutMass` (F(0) before the cut) and applied in `fitCdf`, `fitPdf`,

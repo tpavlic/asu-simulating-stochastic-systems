@@ -293,6 +293,34 @@ export const JOBS = {
       if (res.pA < 0.05) rejA++;
     }
     return { rejD, rejA, used, cut };
+  },
+
+  /* Section 16d: the bootstrap of a normal fitted to truncated recordings,
+     replications [from, to). The truth is a normal at `truth`, its values
+     truncated toward 0 to a multiple of h, and so both signs and a doubled
+     range at 0 occur; every resample is truncated and fitted the same way. */
+  truncCalib(IA, { n, B, from, to, truth, h }) {
+    const d = IA.DISTS.normal;
+    let rejD = 0, rejA = 0, used = 0;
+    for (let rep = from; rep < to; rep++) {
+      const u = IA.MRG32k3a(580000 + rep), x = [];
+      for (let i = 0; i < n; i++) x.push(Number((Math.trunc(d.sample(u, truth) / h) * h).toFixed(6)) || 0);
+      x.sort((a, b) => a - b);
+      const rec = IA.recordingRec(IA.summarize(x), 'trunc');
+      if (!rec || rec.kind !== 'trunc') continue;
+      const f = IA.fitDist(d, x, false, false, null, null, false, { rec });
+      if (!f.ok) continue;
+      const grid = IA.recordingGrid(x);
+      grid.kind = 'trunc';
+      const run = IA.bootstrapRun(f, n, B, 590000 + rep, false, IA.ksStat(x, IA.gofCdf(f), IA.fitAtom(f)).D,
+                                  IA.adStatFit(x, f), null, NaN, 0, null, false, false, grid);
+      run.step(B);
+      const res = run.result();
+      used++;
+      if (res.pD < 0.05) rejD++;
+      if (res.pA < 0.05) rejA++;
+    }
+    return { rejD, rejA, used };
   }
 };
 
