@@ -1929,7 +1929,7 @@ var DG_TEXT = {
     mode: "⌊(n + 1)p⌋",
     when: "successes in n flips",
     lede: "The binomial counts the successes in a fixed number of independent, identical trials.",
-    choose: ["Choose it for <strong>the number of successes in a fixed number n of independent trials with the same success probability p</strong>: defective items in a batch of n, or the customers among n who choose the express lane.", { hd: "Relationship to other distributions", text: "The trials must be independent with a constant p; sampling without replacement from a small lot is hypergeometric instead. For a large n and a small p, the Poisson with α = np is a close and simpler approximation, and for a large n the shape is close to normal." }]
+    choose: ["Choose it for <strong>the number of successes in a fixed number n of independent trials with the same success probability p</strong>: defective items in a batch of n, or the customers among n who choose the express lane.", { hd: "Relationship to other distributions", text: "It is the sum of n Bernoulli trials. The trials must be independent with a constant p; sampling without replacement from a small lot is hypergeometric instead. For a large n and a small p, the Poisson with α = np is a close and simpler approximation, and for a large n the shape is close to normal." }]
   },
   hyper: {
     support: "{max(0, n − N + K), …, min(n, K)}",
@@ -1953,7 +1953,7 @@ var DG_TEXT = {
     mode: "1",
     when: "flips until the first success",
     lede: "The geometric counts the trials up to and including the first success, the discrete analog of the exponential's memoryless wait.",
-    choose: ["Choose it for <strong>the number of trials up to and including the first success</strong>: inspections until the first defective, or attempts until a connection goes through. Here, X counts trials, and so the range starts at 1 and the mean is 1/p; software sometimes counts the failures before the success instead, which shifts everything by one.", { hd: "Relationship to other distributions", text: "It is the discrete memoryless distribution, the analog of the exponential: having failed x times says nothing about the next trial. The negative binomial is the wait for the r-th success rather than the first." }]
+    choose: ["Choose it for <strong>the number of trials up to and including the first success</strong>: inspections until the first defective, or attempts until a connection goes through. Here, X counts trials, and so the range starts at 1 and the mean is 1/p; software sometimes counts the failures before the success instead, which shifts everything by one.", { hd: "Relationship to other distributions", text: "Each trial is an independent Bernoulli trial with the same p. It is the discrete memoryless distribution, the analog of the exponential: having failed x times says nothing about the next trial. The negative binomial is the wait for the r-th success rather than the first." }]
   },
   nbinom: {
     support: "{r, r+1, …}",
@@ -1965,7 +1965,7 @@ var DG_TEXT = {
     mode: "1 when r = 1; ⌊r + (r − 1)(1 − p)/p⌋ otherwise",
     when: "flips until the r-th success",
     lede: "The negative binomial counts the trials up to and including the r-th success, the sum of r geometric waits.",
-    choose: ["Choose it for <strong>the number of trials up to and including the r-th success</strong>: units inspected until r defectives are found, or a demand count whose variance exceeds its mean, where the Poisson is too tight.", { hd: "Relationship to other distributions", text: "It is the sum of r geometric waits, and with r = 1 it is the geometric. As a demand model, it and the geometric let the variance exceed the mean, which the Poisson cannot. Software may define it on the failures rather than the trials, which shifts the range by r." }]
+    choose: ["Choose it for <strong>the number of trials up to and including the r-th success</strong>: units inspected until r defectives are found, or a demand count whose variance exceeds its mean, where the Poisson is too tight.", { hd: "Relationship to other distributions", text: "It counts independent Bernoulli trials until the r-th success, which makes it the sum of r geometric waits, and with r = 1 it is the geometric. As a demand model, it and the geometric let the variance exceed the mean, which the Poisson cannot. Software may define it on the failures rather than the trials, which shifts the range by r." }]
   },
   pois: {
     support: "{0, 1, …}",
