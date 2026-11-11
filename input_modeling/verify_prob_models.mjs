@@ -210,7 +210,7 @@ section('RNG');
 section('Registry shape');
 {
   const ids = DG.dists.map(d => d.id);
-  ok(ids.join(',') === 'unif,tri,norm,expo,erlang,weib,bern,binom,geom,nbinom,pois,gamma,chisq,fdist,tdist,beta,lnorm,rayl,dunif', 'nineteen distributions in tab order');
+  ok(ids.join(',') === 'unif,tri,norm,expo,erlang,weib,bern,binom,hyper,geom,nbinom,pois,gamma,chisq,fdist,tdist,beta,lnorm,rayl,dunif', 'twenty distributions in tab order');
   for (const d of DG.dists) {
     ok(d.refs.length === 3 && d.params.length >= 1 && ['closed', 'search', 'numeric'].includes(d.gen.kind), `${d.id}: three refs, params, and a generator kind`);
     /* Three edges is the true floor, not an arbitrary one: the Bernoulli has
@@ -365,7 +365,7 @@ section('goodness-of-fit tests');
 
   /* The same calibration check for the chi-square test on three discrete
      distributions at their own default parameters. */
-  for (const id of ['pois', 'binom', 'geom']) {
+  for (const id of ['pois', 'binom', 'hyper', 'geom']) {
     const d = DG.byId[id], p = defParams(d);
     const rand = DG.mulberry32(51017 + id.length);
     let rejects = 0, nulls = 0;
@@ -393,6 +393,36 @@ section('goodness-of-fit tests');
     }
     ok(rejects / REPS > 0.5, `Poisson draws tested against the geometric reject well over 50% at n=200 (${rejects}/${REPS})`);
   }
+}
+
+section('Hypergeometric');
+{
+  const h = DG.byId.hyper;
+  close(h.pdf(1, { N: 10, K: 4, n: 3 }), 0.5, 1e-12, 'P(X = 1) at N = 10, K = 4, n = 3 is C(4,1)C(6,2)/C(10,3) = 60/120');
+  close(h.pdf(5, { N: 52, K: 13, n: 5 }), 1287 / 2598960, 1e-12, 'five hearts in a five-card hand is C(13,5)/C(52,5)');
+  const s1 = h.support({ N: 12, K: 6, n: 10 });
+  ok(s1.lo === 4 && s1.hi === 6 && s1.text === '{4, …, 6}', `support at N = 12, K = 6, n = 10 runs from 4 to 6 (${s1.text})`);
+  const s2 = h.support({ N: 2, K: 0, n: 1 });
+  ok(s2.lo === 0 && s2.hi === 0 && s2.text === '{0}', `no successes in the population is a point mass at 0 (${s2.text})`);
+  const c = h.clamp({ N: 8, K: 20, n: 12 });
+  ok(c.K === 8 && c.n === 8, 'clamp pulls K and n down to N');
+  /* The variance is the binomial's times (N - n)/(N - 1), and so it
+     approaches the binomial's as N grows with K/N fixed. */
+  const b = DG.byId.binom;
+  close(h.variance({ N: 30, K: 15, n: 10 }), b.variance({ n: 10, p: 0.5 }) * 20 / 29, 1e-12, 'variance is the binomial variance times the finite-population correction');
+  let maxGap = 0;
+  for (let k = 0; k <= 10; k++) maxGap = Math.max(maxGap, Math.abs(h.pdf(k, { N: 100000, K: 30000, n: 10 }) - b.pdf(k, { n: 10, p: 0.3 })));
+  ok(maxGap < 1e-3, `at N = 100000 the pmf is within 1e-3 of the binomial(10, 0.3)  (max gap ${maxGap.toExponential(2)})`);
+  for (const k of [0, 3, 7]) close(h.pdf(k, { N: 20, K: 7, n: 9 }), h.pdf(9 - k <= 13 ? 9 - k : -1, { N: 20, K: 13, n: 9 }), 1e-12, `swapping successes and failures mirrors the pmf (k = ${k})`);
+  /* The construction draws n distinct items and counts those below K. */
+  const rand = DG.mulberry32(9091);
+  let allOk = true;
+  for (let i = 0; i < 500; i++) {
+    const r = DG.construct.hyper(rand, { N: 30, K: 12, n: 10 });
+    const distinct = new Set(r.drawn).size === 10 && r.drawn.every(j => j >= 0 && j < 30);
+    if (!distinct || r.x !== r.drawn.filter(j => j < 12).length) allOk = false;
+  }
+  ok(allOk, 'construction: n distinct items drawn, and x counts the successes among them');
 }
 
 section('Clamping');
@@ -493,7 +523,7 @@ section('Chi-square and F identities');
 }
 
 section('Constructions match the direct samplers');
-/* DG.construct builds ten distributions out of nothing but uniform draws,
+/* DG.construct builds eleven distributions out of nothing but uniform draws,
    independently of the quantile-based sampler each Dist object carries. A
    two-sample Kolmogorov–Smirnov test compares the whole distribution the
    construction produces against the whole distribution the direct sampler
@@ -504,6 +534,7 @@ section('Constructions match the direct samplers');
   for (const [id, p, draw] of [
     ['erlang', { k: 3, lam: 1.5 }, r => C.erlang(r, { k: 3, lam: 1.5 }).x],
     ['binom', { n: 12, p: 0.3 }, r => C.binom(r, { n: 12, p: 0.3 }).x],
+    ['hyper', { N: 20, K: 7, n: 9 }, r => C.hyper(r, { N: 20, K: 7, n: 9 }).x],
     ['nbinom', { r: 3, p: 0.4 }, r => C.nbinom(r, { r: 3, p: 0.4 }).x],
     ['norm', { mu: 0, sigma: 1 }, r => C.boxMuller(r, 1).a],
     ['rayl', { sigma: 1.5 }, r => C.boxMuller(r, 1.5).r],

@@ -285,11 +285,12 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      zeros it otherwise ran up to within 1e-317 of 0, where the likelihood has no maximum. Section
      16f of the verify checks the lines' form, draws from the AnyLogic line as JavaScript and from
      the R and Python lines (share of zeros and the rest against the model), and that beta.)*
-- `input_modeling/prob_models.html` *(a gallery of nineteen input-modeling distributions, one per
+- `input_modeling/prob_models.html` *(a gallery of twenty input-modeling distributions, one per
   tab, each with a live pdf or pmf and cdf plot against three labeled reference settings, formulas
   and moments, choose-it-when prose, related-distribution jump links, and an animated
-  inverse-transform generator; ten tabs add a second panel constructing the same draw from simpler
-  pieces (a sum of exponentials for Erlang, the Box–Muller spinner for the normal, two normals
+  inverse-transform generator; eleven tabs add a second panel constructing the same draw from simpler
+  pieces (a sum of exponentials for Erlang, n items drawn from a grid of N without replacement for
+  the hypergeometric, the Box–Muller spinner for the normal, two normals
   arriving from the plane's edges for the Rayleigh, a transfer map from a standard normal to its
   square for chi-square and from a normal to its exponential for the log-normal, and, for Student's
   t and for the F, two independent inputs meeting at a point on axes drawn to one scale, so that the
@@ -315,6 +316,12 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      and each frame is sized to the three reference settings a reader compares against rather than
      to the widest reachable knob corner. A pmf is drawn as stems standing on the integers, never as
      a curve or as bars; a sample is drawn as bars.*
+     *Several layout reservations walk every combination of the knobs' steps (`worstOverGrid`) to
+     find the setting whose text runs longest. The hypergeometric's three whole-number knobs make
+     about 150,000 combinations, which took 14 seconds to open its tab, and so each declares a
+     coarser `gridStep` for that walk alone; the walk then adds each knob's second value and its
+     maximum. The coarse walk reserves the same heights as the full one at 390, 780, and 1280px.
+     A new knob with a large range of whole numbers needs the same.*
   2. *Everything between the `DG-CORE-BEGIN` / `DG-CORE-END` sentinels is pure numerics with no DOM
      access, and the block must not contain the words "window" or "document".
      `input_modeling/verify_prob_models.mjs` slices that block out of the HTML and runs it in Node.*

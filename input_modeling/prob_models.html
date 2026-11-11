@@ -4,12 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Distribution Explorer – interactive explainer</title>
-<meta name="description" content="Nineteen common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
+<meta name="description" content="Twenty common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
 
 <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, etc.) -->
 <meta property="og:type" content="website">
 <meta property="og:title" content="Distribution Explorer – interactive explainer">
-<meta property="og:description" content="Nineteen common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
+<meta property="og:description" content="Twenty common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
 <meta property="og:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/prob_models-preview.png">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1200">
@@ -19,7 +19,7 @@
 <!-- Twitter/X card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Distribution Explorer – interactive explainer">
-<meta name="twitter:description" content="Nineteen common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
+<meta name="twitter:description" content="Twenty common input-modeling distributions, one per tab: live pdf or pmf and cdf plots against reference shapes, formulas and moments, when to choose each one over its neighbors, how they relate, and an animated inverse-transform generator for every one.">
 <meta name="twitter:image" content="https://tpavlic.github.io/asu-simulating-stochastic-systems/input_modeling/prob_models-preview.png">
 
 <!-- Google Analytics -->
@@ -158,7 +158,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
 /* ── Widget-specific ─────────────────────────────────────────────────── */
 /* The distribution picker: a bordered card of pill buttons, styled like the
    page's other .sec cards, standing in for a tab bar that could not read as
-   one control across nineteen destinations. Map is not a distribution, so
+   one control across twenty destinations. Map is not a distribution, so
    its pill sits alone in the top row, set off by a rule, rather than inside
    either group below it, where it would read as a member. Pills wrap
    freely, and so the card never has to overflow or scroll at any width.
@@ -166,7 +166,7 @@ input[type=range] { height: 26px; accent-color: var(--accent); cursor: pointer; 
    order (DG_PICKER_GROUPS), which is a different, shallower grouping than
    the Map tab's six modeling-question groups (DG_ROLE_GROUPS) below it --
    the Map keeps that deeper organization, as it is a one-time reference
-   page, whereas the picker sits on every one of the nineteen destinations and
+   page, whereas the picker sits on every one of the twenty destinations and
    so stays as short as it can. Each pill's left edge carries its group's
    color (--group-cont or --group-disc), and the Map's tiles carry the same
    two colors on their own left edge, and so the picker doubles as the key for
@@ -411,7 +411,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
 .fam-fact + .fam-fact { margin-top: 4px; }
 /* ── Generator panel: the inverse-transform transfer plot beside a side
    note or cumulative table, and the draw controls beneath – shared markup
-   across all nineteen tabs, built once by genPanelBodyHtml. ── */
+   across all twenty tabs, built once by genPanelBodyHtml. ── */
 .gen-wrap { display: flex; gap: 13px; align-items: flex-start; margin-top: 4px; }
 .gen-wrap > svg { flex: 0 1 520px; }
 .gen-side { flex: 1 1 200px; min-width: 0; font-size: .82rem; color: var(--muted); }
@@ -471,7 +471,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
   .sum-ci { min-width: 13ch; }
 }
 /* ── "Built from other distributions" panels: a second, independent way to land on
-   nine of the nineteen distributions, nested inside the generator section
+   eleven of the twenty distributions, nested inside the generator section
    they extend. The picture and the histogram share the transfer plot's own
    520-wide sizing so the two sections read as one family, and the picture's
    viewBox never changes shape between a normal draw and the gated note that
@@ -597,7 +597,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
       <option value="tdist">Student's t</option>
     </optgroup>
     <optgroup label="Discrete">
-      <option value="bern">Bernoulli</option><option value="binom">Binomial</option><option value="geom">Geometric</option>
+      <option value="bern">Bernoulli</option><option value="binom">Binomial</option><option value="hyper">Hypergeometric</option><option value="geom">Geometric</option>
       <option value="nbinom">Negative binomial</option><option value="pois">Poisson</option><option value="dunif">Discrete uniform</option>
     </optgroup>
   </select>
@@ -619,6 +619,7 @@ svg.famdiagram { display: block; margin: 0 auto; max-width: 100%; height: auto; 
   <section id="tab-weib" class="tp"></section>
   <section id="tab-bern" class="tp"></section>
   <section id="tab-binom" class="tp"></section>
+  <section id="tab-hyper" class="tp"></section>
   <section id="tab-geom" class="tp"></section>
   <section id="tab-nbinom" class="tp"></section>
   <section id="tab-pois" class="tp"></section>
@@ -771,7 +772,7 @@ DG.searchQ = function (cdf, u, kmin) {
   return k;
 };
 /* ---------------------------------------------------------------------
-   The distribution registry: nineteen input-modeling distributions, one
+   The distribution registry: twenty input-modeling distributions, one
    per gallery tab, each exposing the same pdf/cdf/quantile/moment/sample
    interface so the UI can render every tab from one generic template.
    Densities that can blow up at a support endpoint (a shape parameter
@@ -1086,6 +1087,58 @@ DG.dists = [];
       ],
       axis: { x0: -0.5, x1: 30.5, y1: 0.4, xt: 5 },
       gen: { kind: 'search', bins: dgIntBins(-0.5, 30.5) }
+    });
+  })();
+
+  /* ---- Hypergeometric: successes among n items drawn without
+     replacement from N items, K of which are successes. K and n cannot
+     exceed N, and so clamp pulls them down to it. Log-space pmf, with the
+     support's two ends set by running out of successes or of failures. --- */
+  (function () {
+    function clamp(p) { var N = p.N; return { N: N, K: Math.min(p.K, N), n: Math.min(p.n, N) }; }
+    function lo(p) { return Math.max(0, p.n - (p.N - p.K)); }
+    function hi(p) { return Math.min(p.n, p.K); }
+    function support(p) {
+      var a = lo(p), b = hi(p);
+      return { lo: a, hi: b, text: a === b ? '{' + a + '}' : '{' + a + ', …, ' + b + '}' };
+    }
+    function pdf(k, p) {
+      if (k < lo(p) || k > hi(p) || k !== Math.round(k)) return 0;
+      return Math.exp(sf.logChoose(p.K, k) + sf.logChoose(p.N - p.K, p.n - k) - sf.logChoose(p.N, p.n));
+    }
+    function cdf(x, p) {
+      var a = lo(p), b = hi(p);
+      if (x < a) return 0; if (x >= b) return 1;
+      var kmax = Math.floor(x), s = 0;
+      for (var k = a; k <= kmax; k++) s += pdf(k, p);
+      return s;
+    }
+    function quantile(u, p) { return DG.searchQ(function (k) { return cdf(k, p); }, u, lo(p)); }
+    function mean(p) { return p.n * p.K / p.N; }
+    function variance(p) {
+      if (p.N <= 1) return 0;
+      var q = p.K / p.N;
+      return p.n * q * (1 - q) * (p.N - p.n) / (p.N - 1);
+    }
+    function mode(p) { return Math.max(lo(p), Math.min(hi(p), Math.floor((p.n + 1) * (p.K + 1) / (p.N + 2)))); }
+    function sample(rand, p) { return quantile(DG.unif(rand), p); }
+    DG.dists.push({
+      id: 'hyper', name: 'Hypergeometric', type: 'd', group: 'disc', role: 'trial',
+      notation: 'X ~ Hypergeometric(N, K, n)',
+      params: [
+        { key: 'N', sym: 'N', label: 'Population size, N', min: 2, max: 100, step: 1, gridStep: 9, def: 30, int: true },
+        { key: 'K', sym: 'K', label: 'Successes in the population, K', min: 0, max: 100, step: 1, gridStep: 9, def: 15, int: true },
+        { key: 'n', sym: 'n', label: 'Items drawn, n', min: 1, max: 15, step: 1, gridStep: 2, def: 10, int: true }
+      ],
+      clamp: clamp, support: support, pdf: pdf, cdf: cdf, quantile: quantile,
+      mean: mean, variance: variance, mode: mode, sample: sample,
+      refs: [
+        { label: 'N = 20, K = 4, n = 10', p: { N: 20, K: 4, n: 10 } },
+        { label: 'N = 30, K = 15, n = 10', p: { N: 30, K: 15, n: 10 } },
+        { label: 'N = 100, K = 80, n = 10', p: { N: 100, K: 80, n: 10 } }
+      ],
+      axis: { x0: -0.5, x1: 15.5, y1: 0.5, xt: 5 },
+      gen: { kind: 'search', bins: dgIntBins(-0.5, 15.5) }
     });
   })();
 
@@ -1506,7 +1559,7 @@ DG.byId = {};
 for (var i = 0; i < DG.dists.length; i++) DG.byId[DG.dists[i].id] = DG.dists[i];
 
 /* ── Constructions from other distributions ────────────────────────────────────
-   A second, independent way to land on nine of the distributions above,
+   A second, independent way to land on eleven of the distributions above,
    each one built out of nothing but DG.unif calls rather than out of a
    quantile function. Every entry returns the draw itself under x (or under
    x for a ratio) plus the intermediate values the picture needs to show its
@@ -1524,6 +1577,19 @@ DG.construct = {
     var flips = [], x = 0;
     for (var i = 0; i < p.n; i++) { var f = DG.unif(rand) < p.p ? 1 : 0; flips.push(f); x += f; }
     return { x: x, flips: flips };
+  },
+  /* n items drawn without replacement from N, the first K of which are
+     successes: a partial Fisher-Yates shuffle puts a uniformly chosen
+     remaining item in each of the first n places, in the order drawn. */
+  hyper: function (rand, p) {
+    var items = [], drawn = [], x = 0;
+    for (var i = 0; i < p.N; i++) items.push(i);
+    for (var j = 0; j < p.n; j++) {
+      var r = j + Math.floor(DG.unif(rand) * (p.N - j));
+      var t = items[j]; items[j] = items[r]; items[r] = t;
+      drawn.push(items[j]); if (items[j] < p.K) x++;
+    }
+    return { x: x, drawn: drawn };
   },
   /* Flip until the r-th success; the trial count is the draw. */
   nbinom: function (rand, p) {
@@ -1865,6 +1931,18 @@ var DG_TEXT = {
     lede: "The binomial counts the successes in a fixed number of independent, identical trials.",
     choose: ["Choose it for <strong>the number of successes in a fixed number n of independent trials with the same success probability p</strong>: defective items in a batch of n, or the customers among n who choose the express lane.", { hd: "Relationship to other distributions", text: "The trials must be independent with a constant p; sampling without replacement from a small lot is hypergeometric instead. For a large n and a small p, the Poisson with α = np is a close and simpler approximation, and for a large n the shape is close to normal." }]
   },
+  hyper: {
+    support: "{max(0, n − N + K), …, min(n, K)}",
+    paramRange: "N, a positive integer; K, a whole number from 0 to N; and n, a whole number from 1 to N (the population size, how many items in it are successes, and how many items are drawn)",
+    pdf: "p(k) = <span class=\"frac\"><span class=\"num\">C(K, k)C(N − K, n − k)</span><span class=\"den\">C(N, n)</span></span> for k in the range above",
+    cdf: "F(x) = Σ<sub>k ≤ x</sub> p(k)",
+    mean: "<span class=\"frac\"><span class=\"num\">nK</span><span class=\"den\">N</span></span>",
+    variance: "n<span class=\"frac\"><span class=\"num\">K</span><span class=\"den\">N</span></span>(1 − <span class=\"frac\"><span class=\"num\">K</span><span class=\"den\">N</span></span>)<span class=\"frac\"><span class=\"num\">N − n</span><span class=\"den\">N − 1</span></span>",
+    mode: "⌊(n + 1)(K + 1)/(N + 2)⌋",
+    when: "successes in n draws without replacement",
+    lede: "The hypergeometric counts the successes among n items drawn without replacement from a population of N items, K of which are successes.",
+    choose: ["Choose it for <strong>the number of successes among n items drawn without replacement from a finite population of N items, K of which are successes</strong>: defective parts among n inspected from a lot of N, or the hearts in a hand of n cards dealt from one deck.", { hd: "Relationship to other distributions", text: "Each draw is a Bernoulli trial, a success or a failure, but its success probability starts at K/N and changes with every item removed, and so the draws are not independent. Drawing with replacement would keep that probability at K/N on every draw, and the count would be binomial. Without replacement, the variance is the binomial's np(1 − p) times (N − n)/(N − 1), a factor called the finite-population correction. When the population is large next to the sample, that factor is close to 1, and the binomial with p = K/N is a close approximation." }, { hd: "Using it in a simulation", text: "N and n are usually known from how the sample is taken, and so the hypergeometric is chosen from the way the counts arise rather than fitted to data. A simulation often models the population itself, such as a lot of N parts with K defective, and the hypergeometric count then comes out of the model rather than being drawn from this distribution. Drawing from it directly fits when only the count matters." }]
+  },
   geom: {
     support: "{1, 2, …}",
     paramRange: "0 < p ≤ 1 (the probability of a success on each trial)",
@@ -2002,7 +2080,7 @@ var DG_TEXT = {
 
 /* ── Tab content builder ─────────────────────────────────────────────
    Every distribution tab is built once, at load, from its DG.dists entry
-   and its DG_TEXT content, rather than hand-written nineteen times over.
+   and its DG_TEXT content, rather than hand-written twenty times over.
    The knobs, chips, plots, moments, and related links all come out of this
    one function, and so a change to the layout only has to be made once. */
 function fmtNum(v) {
@@ -2500,6 +2578,7 @@ var DG_THUMB = {
   weib: { x0: 0, x1: 3, settings: [{ k: 0.7, mu: 1 }, { k: 1, mu: 1 }, { k: 3, mu: 1 }] },
   bern: { x0: -0.5, x1: 1.5, settings: [{ p: 0.35 }] },
   binom: { x0: -0.5, x1: 10.5, settings: [{ n: 10, p: 0.5 }] },
+  hyper: { x0: -0.5, x1: 10.5, settings: [{ N: 20, K: 6, n: 10 }] },
   geom: { x0: 0.5, x1: 10.5, settings: [{ p: 0.4 }] },
   nbinom: { x0: 0.5, x1: 20.5, settings: [{ r: 3, p: 0.4 }] },
   pois: { x0: -0.5, x1: 12.5, settings: [{ alpha: 3 }] },
@@ -2582,7 +2661,7 @@ var DG_ROLE_GROUPS = [
    so it stays at two short rows instead of the Map's six. ── */
 var DG_PICKER_GROUPS = [
   { type: 'c', label: 'Continuous', order: ['unif', 'tri', 'beta', 'norm', 'lnorm', 'expo', 'erlang', 'weib', 'gamma', 'rayl', 'chisq', 'fdist', 'tdist'] },
-  { type: 'd', label: 'Discrete', order: ['bern', 'binom', 'geom', 'nbinom', 'pois', 'dunif'] }
+  { type: 'd', label: 'Discrete', order: ['bern', 'binom', 'hyper', 'geom', 'nbinom', 'pois', 'dunif'] }
 ];
 function pillHtml(d) {
   var t = DG_TEXT[d.id];
@@ -2660,6 +2739,7 @@ var DG_FAMILIES = [
       { from: 'bern', to: 'binom', label: 'sum of n' },
       { from: 'bern', to: 'dunif', label: 'p = 0.5 on two points' },
       { from: 'binom', to: 'pois', label: 'large n, small p' },
+      { from: 'binom', to: 'hyper', label: 'without replacement' },
       { from: 'geom', to: 'nbinom', label: 'sum of r' }
     ]
   },
@@ -2693,7 +2773,7 @@ DG_FAMILIES.forEach(function (f) { DG_FAM_BY_ID[f.id] = f; });
    own tab shows exactly one of them. */
 var DG_TAB_FAMILY = {
   expo: 'waiting', erlang: 'waiting', weib: 'waiting', gamma: 'waiting', pois: 'waiting',
-  bern: 'trials', binom: 'trials', geom: 'trials', nbinom: 'trials', dunif: 'trials',
+  bern: 'trials', binom: 'trials', hyper: 'trials', geom: 'trials', nbinom: 'trials', dunif: 'trials',
   unif: 'bounded', tri: 'bounded', beta: 'bounded',
   norm: 'normals', lnorm: 'normals', chisq: 'normals', fdist: 'normals', tdist: 'normals', rayl: 'normals'
 };
@@ -2779,7 +2859,7 @@ function dgFamilyJumpButton(id) {
    and a Weibull plot are not the distributions themselves and stay as
    text either; the tab's own name is never linked to itself. */
 var DG_LINK_NAMES = [
-  ['negative binomial', 'nbinom', 'i'], ['discrete uniform', 'dunif', 'i'], ['continuous uniform', 'unif', 'i'],
+  ['hypergeometric', 'hyper', 'i'], ['negative binomial', 'nbinom', 'i'], ['discrete uniform', 'dunif', 'i'], ['continuous uniform', 'unif', 'i'],
   ['log-normal', 'lnorm', 'i'], ['chi-square', 'chisq', 'i'], ["Student's t", 'tdist', ''],
   ['Bernoulli', 'bern', ''], ['binomial', 'binom', 'i'], ['geometric', 'geom', 'i'], ['Poisson', 'pois', ''],
   ['exponential', 'expo', 'i'], ['Erlang', 'erlang', ''], ['Weibull', 'weib', ''], ['Gamma', 'gamma', ''],
@@ -3135,7 +3215,12 @@ function dgCloneFontCss(cs) {
    for it. Walks every combination on each param's own step grid (small: a
    knob's range divided by its step) and returns the params object scoring
    highest under scoreFn, and so the caller can add just this one extra candidate
-   to whatever corner/reference set it already measures. */
+   to whatever corner/reference set it already measures. A knob whose grid
+   would multiply out to too many settings (the hypergeometric's three whole
+   numbers make about 150,000) declares a coarser gridStep for this walk
+   alone, and its second value and its maximum are then added to the walk,
+   so that a setting next to either end still counts (a single success in a
+   large population has the longest mean, 0.0114). */
 function worstOverGrid(d, scoreFn) {
   var best = null, bestScore = -Infinity;
   function rec(i, p) {
@@ -3145,13 +3230,18 @@ function worstOverGrid(d, scoreFn) {
       if (s > bestScore) { bestScore = s; best = pc; }
       return;
     }
-    var q = d.params[i];
-    for (var v = q.min; v <= q.max + 1e-9; v += q.step) {
+    var q = d.params[i], step = q.gridStep || q.step, vals = [];
+    for (var v = q.min; v <= q.max + 1e-9; v += step) vals.push(Number(v.toFixed(6)));
+    if (q.gridStep) {
+      vals.splice(1, 0, Number((q.min + q.step).toFixed(6)));
+      if (vals[vals.length - 1] < q.max) vals.push(q.max);
+    }
+    vals.forEach(function (val) {
       var next = {};
       for (var k in p) next[k] = p[k];
-      next[q.key] = Number(v.toFixed(6));
+      next[q.key] = val;
       rec(i + 1, next);
-    }
+    });
   }
   rec(0, {});
   return best;
@@ -3294,7 +3384,7 @@ function updateChips(d, p) {
    distribution's own x on the horizontal axis, with a histogram of drawn
    values in each margin), an animated single draw, and a side panel that is
    either a short note or, for a search-kind distribution, the cumulative
-   table the search itself walks. Shared by all nineteen tabs: only the
+   table the search itself walks. Shared by all twenty tabs: only the
    recipe text and the side panel differ, both keyed off the registry's own
    gen.kind, and so one set of functions renders every tab from DG_RECIPE and the
    distribution object itself. ── */
@@ -3462,6 +3552,7 @@ var DG_RECIPE = {
     return { main: cases, alt: dgNote('X = 1 when U &lt; p; both compare one uniform to one number.') };
   },
   binom: function () { return DG_SEARCH_RECIPE; },
+  hyper: function () { return DG_SEARCH_RECIPE; },
   geom: function (p) {
     var currentExpr = '⌈ln(1 − U) / ln(1 − p)⌉' + (p.p < 1 ? ' = ⌈ln(1 − U) / ' + fmtNum(Math.log(1 - p.p)) + '⌉' : '');
     var cases = dgCasesHtml('X', [
@@ -3514,6 +3605,7 @@ var GEN_ALT_BELOW = {
   norm: 'An alternative approach, presented farther below, turns two uniforms into two normals with the Box–Muller transform and needs no inverse at all.',
   rayl: 'An alternative approach, presented farther below, takes the distance from the origin of two normal draws.',
   binom: 'An alternative approach, presented farther below, counts the successes in n Bernoulli trials directly.',
+  hyper: 'An alternative approach, presented farther below, draws the n items from the population one at a time and counts the successes directly.',
   nbinom: 'An alternative approach, presented farther below, runs Bernoulli trials until the r-th success.'
 };
 function genMethodHtml(d) {
@@ -3564,17 +3656,18 @@ function genPanelBodyHtml(d) {
 }
 
 /* ── "Built from other distributions" panels ───────────────────────────────────
-   A second, independent way to land on nine of the nineteen distributions,
+   A second, independent way to land on eleven of the twenty distributions,
    built out of nothing but DG.unif calls (DG.construct in the core) rather
    than out of a quantile function. Nested inside the same section as the
    inverse-transform generator above, because both panels answer the same
    question – how does software actually produce a draw – from two
    different angles. Only the picture differs by distribution; the draw and
    reset controls, the running message, and the histogram against the true
-   pdf or pmf are built once and shared by all eight. */
+   pdf or pmf are built once and shared by all eleven. */
 var DG_CON_LEDE = {
   erlang: 'Instead of using a numerical search to do inverse-transform sampling, Erlang random variates can be generated by summing <a class="jump" href="#expo" onclick="jumpTo(\'expo\');return false;">exponentials</a> (which themselves have an analytical generator that requires no search). The process draws k exponentials, each by transforming a <a class="jump" href="#unif" onclick="jumpTo(\'unif\');return false;">uniform</a> through the exponential\'s own generator −ln(U)/λ, and the k exponentials laid end to end sum to one Erlang draw. A sum of logarithms is the logarithm of the product, which is why the generator written above the histogram is shown with only one logarithm.',
   binom: 'n coin flips; the count of heads is one binomial draw.',
+  hyper: 'A population of N items, the first K of them successes (filled), and n of them drawn one at a time without replacement (ringed); the count of successes drawn is one hypergeometric draw. Each draw changes the mix left for the next, which is what makes this count differ from a binomial one.',
   nbinom: 'Flip until the r-th head; the number of flips is one negative binomial draw. With r = 1 this is the geometric.',
   norm: 'The squared radius of two independent normals is exponentially distributed, and so a radius drawn from that exponential, paired with a uniform angle, lands a point whose two coordinates are independent normals.',
   rayl: 'Draw two independent normal coordinates with the same spread; their distance from the origin is a Rayleigh draw. This is the Box–Muller picture read the other way, but the transform itself is a way to get normals, not a way to get a Rayleigh.',
@@ -4091,6 +4184,35 @@ function conPicFlips(d, p, st, W, H) {
     if (d.id === 'nbinom' && i === count - 1) h += '<circle cx="' + cx + '" cy="' + cy + '" r="' + (rad + 3) + '" fill="none" stroke="var(--est)" stroke-width="2"/>';
   }
   var label = d.id === 'binom' ? ('Heads: ' + res.x + ' of ' + p.n + ' flips') : ('Flips to the r-th head: ' + res.x + ' (r = ' + p.r + ')');
+  h += '<text x="' + (W / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="Outfit, Source Serif 4, sans-serif">' + label + '</text>';
+  return h;
+}
+/* The hypergeometric picture: the whole population as a grid of N items,
+   wrapped every 25 so that the largest N still fits the fixed-height frame,
+   the K successes filled and listed first, and the n items the last draw
+   took ringed in the output color. The grid stands before the first draw
+   too, because the population is fixed by the parameters rather than by
+   the draw. */
+function conPicUrn(d, p, st, W, H) {
+  var res = st.last, count = p.N, cols = Math.min(25, count), rows = Math.ceil(count / 25);
+  var taken = {};
+  if (res) res.drawn.forEach(function (i) { taken[i] = true; });
+  // Square cells, the grid centered in the space above the label, and so
+  // the rows of a small population sit together rather than spreading.
+  var padX = 14, padY = 12, availW = W - 2 * padX, availH = H - 2 * padY - 20;
+  var cell = Math.min(availW / Math.max(1, cols), availH / Math.max(1, rows), 26);
+  var gx = padX + (availW - cell * cols) / 2, gy = padY + (availH - cell * rows) / 2;
+  var rad = Math.max(2, Math.min(9, cell / 2 - 3)), ring = Math.min(rad + 2.5, cell / 2 - 1);
+  var h = '';
+  for (var i = 0; i < count; i++) {
+    var col = i % 25, row = Math.floor(i / 25);
+    var cx = gx + cell * (col + 0.5), cy = gy + cell * (row + 0.5);
+    var succ = i < p.K;
+    h += '<circle cx="' + cx + '" cy="' + cy + '" r="' + rad + '" fill="' + (succ ? 'var(--truth)' : 'var(--card)') + '" stroke="' + (succ ? 'var(--truth)' : 'var(--border)') + '" stroke-width="1.4"/>';
+    if (taken[i]) h += '<circle cx="' + cx + '" cy="' + cy + '" r="' + ring + '" fill="none" stroke="var(--est)" stroke-width="2"/>';
+  }
+  var label = res ? ('Successes drawn: ' + res.x + ' of n = ' + p.n)
+    : ('K = ' + p.K + ' successes among N = ' + p.N + ' items');
   h += '<text x="' + (W / 2) + '" y="' + (H - 4) + '" text-anchor="middle" fill="var(--muted)" font-size="11" font-family="Outfit, Source Serif 4, sans-serif">' + label + '</text>';
   return h;
 }
@@ -4950,7 +5072,7 @@ function reserveConSumHeight(d) {
   var h = dgMeasureOffscreen(el, CON_SUM_HTML.erlang({ x: 0.00123, us: us }, { k: p.k, lam: 0.00123 }));
   el.style.minHeight = (Math.ceil(h * 100) / 100) + 'px';
 }
-var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, nbinom: conPicFlips, norm: conPicBoxMullerNorm, rayl: conPicBoxMullerMagnitude, beta: conPicBetaOrder, chisq: conPicChisq, fdist: conPicFdist, tdist: conPicTdist, lnorm: conPicLnorm };
+var CON_PIC = { erlang: conPicErlang, binom: conPicFlips, hyper: conPicUrn, nbinom: conPicFlips, norm: conPicBoxMullerNorm, rayl: conPicBoxMullerMagnitude, beta: conPicBetaOrder, chisq: conPicChisq, fdist: conPicFdist, tdist: conPicTdist, lnorm: conPicLnorm };
 /* Each construction picture's frame: the width it is capped at, the height
    as a fraction of that width, and the class that caps the element itself.
    Most are the wide 520x160 strip. The Normal and Rayleigh planes are
@@ -5748,6 +5870,7 @@ DGUI.conDraw = function (id, n) {
     if (id === 'erlang') { res = DG.construct.erlang(st.rand, p); st.last = res; st.xs.push(res.x); }
     else if (id === 'binom') { res = DG.construct.binom(st.rand, p); st.last = res; st.xs.push(res.x); }
     else if (id === 'nbinom') { res = DG.construct.nbinom(st.rand, p); st.last = res; st.xs.push(res.x); }
+    else if (id === 'hyper') { res = DG.construct.hyper(st.rand, p); st.last = res; st.xs.push(res.x); }
     else if (id === 'beta') { res = DG.construct.betaOrder(st.rand, p); if (!res) break; st.last = res; st.xs.push(res.x); }
     else return;
   }
@@ -5885,6 +6008,16 @@ var DG_TOOLS = {
       dgToolRow('Excel', '=BINOM.INV(' + n + ', ' + pr + ', RAND())')
     ];
   },
+  hyper: function (p, d, v) {
+    var N = v.N, K = v.K, n = v.n, rest = v.expr('N - K', p.N - p.K);
+    return [
+      dgToolRowPlain('Arena', 'no built-in; draw the n items one at a time in the model logic, each a success with probability (successes left)/(items left)'),
+      dgToolRow('R', 'rhyper(reps, ' + K + ', ' + rest + ', ' + n + ')', 'Parameter order: successes, failures, items drawn'),
+      dgToolRow('MATLAB', 'hygernd(' + N + ', ' + K + ', ' + n + ', reps, 1)', 'Parameter order: population size, successes, items drawn'),
+      dgToolRow('NumPy', 'rng.hypergeometric(' + K + ', ' + rest + ', ' + n + ', reps)', 'Parameter order: successes, failures, items drawn'),
+      dgToolRowPlain('Excel', 'no inverse function; walk the cumulative table with HYPGEOM.DIST(k, n, K, N, TRUE) until it passes RAND()')
+    ];
+  },
   geom: function (p, d, v) {
     var pr = v.p;
     return [
@@ -6018,7 +6151,11 @@ function toolsPanelBodyHtml(d) {
     + '<colgroup><col class="tools-col-tool"><col class="tools-col-code"></colgroup>'
     + '<thead><tr><th>Tool</th><th>Code</th></tr></thead><tbody id="tools-rows-' + d.id + '">'
     + rows.map(toolsRowHtml).join('') + '</tbody></table></div>';
-  html += '<p class="knob-note" style="margin-top:6px">In every R, MATLAB, and NumPy line, N is the number of draws, and rng is numpy.random.default_rng().</p>';
+  // The hypergeometric's own N is its population size, and so its lines
+  // name the number of variates reps instead.
+  html += '<p class="knob-note" style="margin-top:6px">' + (d.id === 'hyper'
+    ? 'In every R, MATLAB, and NumPy line, reps is the number of random variates (N is the population size here), and rng is numpy.random.default_rng().'
+    : 'In every R, MATLAB, and NumPy line, N is the number of draws, and rng is numpy.random.default_rng().') + '</p>';
   // The Rayleigh alone gets a reminder tying every tool's own square root
   // back to the construction panel above: whatever the tool's own syntax,
   // the quantity inside that root is always the same exponential draw.
