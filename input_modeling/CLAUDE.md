@@ -321,7 +321,11 @@ embedding, mobile, commit messages) are in the root `CLAUDE.md`.
      about 150,000 combinations, which took 14 seconds to open its tab, and so each declares a
      coarser `gridStep` for that walk alone; the walk then adds each knob's second value and its
      maximum. The coarse walk reserves the same heights as the full one at 390, 780, and 1280px.
-     A new knob with a large range of whole numbers needs the same.*
+     The draw summary's t and chi-square quantiles depend only on the number of draws and are
+     cached by it (`DG_SUM_Q`); before that cache, the Beta (about 40,000 combinations) took 3.9
+     seconds to open and the triangular (about 23,000) 1.3, and with it they take about 0.3 and 0.2
+     on the full walk. A new tab whose walk runs past about 40,000 combinations needs a
+     `gridStep`, checked against the full walk's heights.*
   2. *Everything between the `DG-CORE-BEGIN` / `DG-CORE-END` sentinels is pure numerics with no DOM
      access, and the block must not contain the words "window" or "document".
      `input_modeling/verify_prob_models.mjs` slices that block out of the HTML and runs it in Node.*

@@ -4027,11 +4027,18 @@ function conPanelBodyHtml(d) {
    goodness-of-fit test line against the distribution itself at the
    parameters shown above. dgSummaryStats keeps the interval arithmetic
    exactly as it always has; everything past it is presentation. */
+/* The t and chi-square quantiles depend only on the number of draws, and the
+   layout reservations call this at thousands of parameter settings with the
+   same n, and so each n's three quantiles are found once and kept. */
+var DG_SUM_Q = {};
 function dgSummaryStats(n, mean, sd) {
-  var half = DG.sf.tQ(0.975, n - 1) * sd / Math.sqrt(n);
-  var chiLo = DG.byId.chisq.quantile(0.975, { k: n - 1 });
-  var chiHi = DG.byId.chisq.quantile(0.025, { k: n - 1 });
-  var sdLo = sd * Math.sqrt((n - 1) / chiLo), sdHi = sd * Math.sqrt((n - 1) / chiHi);
+  var q = DG_SUM_Q[n];
+  if (!q) {
+    q = DG_SUM_Q[n] = { t: DG.sf.tQ(0.975, n - 1), chiLo: DG.byId.chisq.quantile(0.975, { k: n - 1 }),
+      chiHi: DG.byId.chisq.quantile(0.025, { k: n - 1 }) };
+  }
+  var half = q.t * sd / Math.sqrt(n);
+  var sdLo = sd * Math.sqrt((n - 1) / q.chiLo), sdHi = sd * Math.sqrt((n - 1) / q.chiHi);
   return { meanLo: mean - half, meanHi: mean + half, sdLo: sdLo, sdHi: sdHi };
 }
 /* A cell with nothing to show yet holds a dash rather than a number, so the
