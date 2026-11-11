@@ -1341,7 +1341,7 @@ export function welchPlot(fig, d) {
   const shadeRec = d.shade ? { kind: 'span', x0: lo, x1: lo, color: tok('--muted'), label: 'excluded by the cut' } : null;
   if (shadeRec) fig.series.push(shadeRec);
   // The band under every line, drawn as one polygon per run of points that
-  // have one, and each replication's series as a thin gray line beneath the
+  // have one, and each replication's series as a thin light line beneath the
   // averages.
   if (band) {
     const cBand = tok('--pair');
@@ -1358,11 +1358,15 @@ export function welchPlot(fig, d) {
     }
     fig.series.push({ kind: 'band', x: Array.from(xs), lo: Array.from(band.lo), hi: Array.from(band.hi), color: cBand, label: band.label || 'confidence band' });
   }
+  // Behind the replications the ensemble average turns dark and heavier, so
+  // that it stands out from the paths it is the mean of; the light lines
+  // stacked many deep never get darker than their own color.
   for (const r of reps) {
-    drawSeries(fig, xs, r.y, { stroke: tok('--muted'), 'stroke-width': 0.9, opacity: 0.55 }, 'm-rep');
-    fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(r.y), color: tok('--muted'), width: 0.8, label: r.label || 'one replication' });
+    drawSeries(fig, xs, r.y, { stroke: tok('--pair'), 'stroke-width': 0.9, opacity: 0.6 }, 'm-rep');
+    fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(r.y), color: tok('--pair'), width: 0.8, label: r.label || 'one replication' });
   }
-  if (d.raw) { drawSeries(fig, xs, d.raw, { stroke: tok('--pair'), 'stroke-width': 1 }, 'm-raw'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.raw), color: tok('--pair'), width: 1, label: 'ensemble average' }); }
+  const cRaw = reps.length ? tok('--muted') : tok('--pair'), wRaw = reps.length ? 1.5 : 1;
+  if (d.raw) { drawSeries(fig, xs, d.raw, { stroke: cRaw, 'stroke-width': wRaw }, 'm-raw'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.raw), color: cRaw, width: wRaw, label: 'ensemble average' }); }
   if (d.cumulative) { drawSeries(fig, xs, d.cumulative, { stroke: tok('--truth'), 'stroke-width': 1.8, 'stroke-dasharray': '6,4' }, 'm-cum'); fig.series.push({ kind: 'line', x: Array.from(xs), y: Array.from(d.cumulative), color: tok('--truth'), dash: true, label: 'cumulative average' }); }
   if (d.smooth) {
     // A white halo under the smoothed line keeps it legible where it crosses

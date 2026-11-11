@@ -789,10 +789,11 @@ function warmLegend(ds) {
   const R = ds ? ds.reps.length : 0;
   const per = align === 'index' ? 'one point per observation index' : 'one point per time bin';
   const items = [];
-  if (ds && showReps && R > 1) items.push({ swatch: 'thin', color: '--muted', label: 'one replication’s own series' });
+  const repsShown = ds && showReps && R > 1;
+  if (repsShown) items.push({ swatch: 'thin', color: '--pair', label: 'one replication’s own series' });
   if (ds && showBand && R > 1) items.push({ swatch: 'shade', color: '--pair', label: lvl(state.settings.level) + ' band on the ensemble average, point by point' });
   items.push(
-    { swatch: 'thin', color: '--pair', label: R === 1 ? 'the one replication’s series (' + per + ')' : 'ensemble average across ' + (R ? plural(R, 'replication') : 'the replications') + ' (' + per + ')' },
+    { swatch: repsShown ? 'line' : 'thin', color: repsShown ? '--muted' : '--pair', label: R === 1 ? 'the one replication’s series (' + per + ')' : 'ensemble average across ' + (R ? plural(R, 'replication') : 'the replications') + ' (' + per + ')' },
     { swatch: 'line', color: '--est', label: 'moving average over 2<span class="sym">w</span> + 1 = ' + intl(2 * w + 1) + ' points' },
     { swatch: 'dash', color: '--truth', label: R === 1 ? 'cumulative average from the start' : 'cumulative average of the ensemble average, from the start' },
     { swatch: 'dash', color: '--accent', label: 'your cut (drag it, click the plot, or use the arrow keys)' }
