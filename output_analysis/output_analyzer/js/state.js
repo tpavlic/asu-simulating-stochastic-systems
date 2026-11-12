@@ -76,7 +76,8 @@ export function add(ds) {
 
 /**
  * Removes a dataset by id and emits 'datasets'; clears the selection, with a
- * 'selection' event, when it was the selected one.
+ * 'selection' event, when it was the selected one. Removing the last dataset
+ * also puts the settings back to their defaults (see resetSettings).
  * @param {string} id
  * @returns {boolean} whether a dataset was removed
  */
@@ -86,7 +87,20 @@ export function remove(id) {
   datasets.splice(i, 1);
   emit('datasets', { type: 'remove', id });
   if (selectedId === id) { selectedId = null; emit('selection', null); }
+  if (!datasets.length) resetSettings();
   return true;
+}
+
+/**
+ * Puts the confidence level (95%, with no Bonferroni count) and the transform
+ * (none) back to their defaults, emitting 'settings' for each that changes.
+ * An empty dataset list leaves nothing for a chosen level or transform to
+ * describe, and so the next data loaded start from the defaults rather than
+ * from an earlier analysis's choices.
+ */
+export function resetSettings() {
+  setLevel(0.95);
+  setTransform('none');
 }
 
 /**
@@ -261,5 +275,5 @@ export function setResult(pageId, result) {
 }
 
 /** The same API as one object, for `import state from './state.js'`. */
-const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, setBlocks, get, select, selected, setLevel, setCustomLevel, setTransform, setResult, setPick, getPick };
+const state = { datasets, settings, LEVELS, results, picks, on, emit, add, remove, rename, setBlocks, get, select, selected, setLevel, setCustomLevel, setTransform, resetSettings, setResult, setPick, getPick };
 export default state;

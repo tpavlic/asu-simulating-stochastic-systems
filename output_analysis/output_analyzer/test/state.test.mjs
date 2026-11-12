@@ -23,3 +23,22 @@ test('a dataset added under a name in use takes the next number, and a rename to
   assert.equal(state.rename(c.id, 'Nights'), true);
   for (const d of [a, b, c]) state.remove(d.id);
 });
+
+test('removing the last dataset puts the level and the transform back to their defaults', () => {
+  const a = state.add(ds('First'));
+  const b = state.add(ds('Second'));
+  state.setCustomLevel(0.95, 2);
+  state.setTransform('log');
+  // One dataset left: the choices stand.
+  state.remove(a.id);
+  assert.deepEqual([state.settings.custom, state.settings.bonfC, state.settings.transform], [true, 2, 'log']);
+  state.remove(b.id);
+  assert.deepEqual(
+    { level: state.settings.level, base: state.settings.base, bonfC: state.settings.bonfC, custom: state.settings.custom, transform: state.settings.transform },
+    { level: 0.95, base: 0.95, bonfC: 1, custom: false, transform: 'none' });
+  // A preset level other than 95% resets too.
+  const c = state.add(ds('Third'));
+  state.setLevel(0.99);
+  state.remove(c.id);
+  assert.equal(state.settings.level, 0.95);
+});

@@ -52,7 +52,7 @@ function refresh() {
 export function render(root) {
   root.innerHTML =
     '<h2>' + title + '</h2>' +
-    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, the transform of the replication outcomes, and the setting of every control on every page. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, and so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
+    '<p class="lede">Everything loaded and chosen here is kept in this browser, on this computer, and comes back on the next visit: the datasets, the confidence level, the transform of the replication outcomes, and the setting of every control on every page. Removing the last dataset puts the confidence level back to 95% and the transform back to none, so that new data never start from an earlier analysis’s choices. Nothing is sent anywhere. The browser keeps a separate store for each place the page is opened from, and so what was loaded on the page at its own address is not seen when the page is embedded in a course site, and the other way around. Forgetting the session clears all of it and starts over.</p>' +
     '<div class="sec"><div class="sec-hd">Stored in this browser</div>' +
       '<p class="xp-status" id="ss-status"></p>' +
       '<p class="muted-line" id="ss-size" aria-live="polite"></p>' +

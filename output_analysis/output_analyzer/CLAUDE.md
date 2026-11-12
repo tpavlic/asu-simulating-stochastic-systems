@@ -282,7 +282,8 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   figure toolbars, and the export rows, so printing any page prints what it shows. The confidence
   level is one shared setting with a "Custom…" entry (a stated level and a Bonferroni count C,
   applied per interval everywhere; Several Systems reads the stated level, `state.settings.base`,
-  because it divides α by its own family sizes), and every parametric result carries a checks line
+  because it divides α by its own family sizes; removing the last dataset puts the level back to 95%
+  and the transform back to none, `resetSettings` in `js/state.js`), and every parametric result carries a checks line
   from `js/ui/checks.js` (Shapiro–Wilk on what the procedure takes as normal, Levene's test where a
   variance is pooled; flags only, never gates, and a line whose checks all pass says so with a check
   badge). The transform of the replication outcomes is a second shared setting (`state.settings.transform`,
