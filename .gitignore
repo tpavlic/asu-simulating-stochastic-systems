@@ -25,6 +25,10 @@ tags
 # Browser-automation artifacts from local testing (screenshots, snapshots)
 .playwright-mcp/
 
+# Python bytecode, written beside any module Python imports (the Arena reference parser, for one)
+__pycache__/
+*.py[cod]
+
 # Specs, plans, and notes the superpowers plugin writes while planning work
 /docs/superpowers/
 
