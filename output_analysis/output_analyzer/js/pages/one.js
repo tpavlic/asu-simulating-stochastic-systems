@@ -1099,6 +1099,34 @@ function overrideBlock(ds, on, oneRep) {
   return box;
 }
 
+// A dataset loaded as antithetic pair averages with its pairs kept.
+const hasPairs = ds => !!(ds && ds.source.pairs && Array.isArray(ds.source.pairs.first) && ds.source.pairs.first.length >= 2);
+
+/**
+ * The span that the marks of every dataset loaded with `ds` as antithetic pair
+ * averages need, so that the sets one file holds share one scale and switching
+ * between them keeps every mark in place: each set's pair averages (with
+ * `members`, its replications) and its interval at the page's level and
+ * procedure. A set loaded on its own spans only itself; null for a dataset
+ * without kept pairs.
+ * @returns {[number, number]|null}
+ */
+function pairsSpan(ds, np, members) {
+  if (!hasPairs(ds)) return null;
+  const level = state.settings.level;
+  const sets = ds.loadId ? state.datasets.filter(d => d.loadId === ds.loadId && hasPairs(d)) : [ds];
+  let lo = Infinity, hi = -Infinity;
+  const take = v => { if (Number.isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } };
+  for (const d of sets) {
+    const P = d.source.pairs;
+    const avg = P.first.map((v, k) => (v + P.second[k]) / 2);
+    for (const v of members ? P.first.concat(P.second) : avg) take(v);
+    const iv = np ? signedRank(avg, { level }) : tInterval(avg, level);
+    take(iv.lo); take(iv.hi);
+  }
+  return lo <= hi ? [lo, hi] : null;
+}
+
 /**
  * The pairs of a dataset loaded as antithetic pair averages, one column per
  * pair: the pair's first replication as a filled dot and its second as a
@@ -1131,12 +1159,36 @@ function drawPairs(d) {
   const ks = Array.from({ length: n }, (_, k) => k + 1);
   const xa = order ? ks.map(k => 2 * k - 1) : ks, xb = order ? ks.map(k => 2 * k) : ks, xm = order ? ks.map(k => 2 * k - 0.5) : ks;
   const cols = order ? 2 * n : n;
+  // The interval the page shows, on the pairs' own scale only when no
+  // transform moves it off that scale, as a strip at the right edge with a
+  // tick for each pair average beside it.
+  const level = state.settings.level;
+  const tfNone = !d.tf || d.tf === 'none';
+  const ti = tfNone && d.ti && Number.isFinite(d.ti.lo) ? d.ti : null;
+  const flagged = !!(ti && d.mu0 && d.mu0.excluded);
+  const intName = lvl(level) + (d.np ? ' Wilcoxon interval on the pseudo-median' : ' t interval on the mean');
+  const span = tfNone ? pairsSpan(d.ds, d.np, true) : null;
+  const shared = !!(span && d.ds.loadId && state.datasets.filter(x => x.loadId === d.ds.loadId && hasPairs(x)).length > 1);
   pairsFig.render(f => {
-    const sx = f.x([0.5, cols + 0.5]);
-    const sy = f.y(extent(a, b, mu0 != null ? [mu0] : null), { pad: 0.06, nice: true });
-    f.axes({ xInteger: true, xLabel: order ? 'Replication' : 'Pair', yLabel: outcomeAxis(d.ds, false, 'none') });
+    // The strip takes about 44 px at the right, whatever the number of columns.
+    const stripCols = ti ? 44 * (cols + 0.5) / Math.max(60, f.iw - 44) : 0;
+    const right = cols + 0.5 + stripCols;
+    const sx = f.x([0.5, right]);
+    const sy = f.y(extent(a, b, span, ti ? [ti.lo, ti.hi] : null, mu0 != null ? [mu0] : null), { pad: 0.06, nice: true });
+    f.axes({ x: false, xLabel: order ? 'Replication' : 'Pair', yLabel: outcomeAxis(d.ds, false, 'none') });
+    // The x ticks stop at the last column, so that none falls in the strip.
+    const cMuted = tok('--muted');
+    const at = sx.ticks(Math.max(2, Math.round(f.iw / 95))).filter(v => Number.isInteger(v) && v >= 1 && v <= cols);
+    for (const v of at) {
+      svgEl('line', { x1: sx(v), x2: sx(v), y1: f.ih, y2: f.ih + 4, stroke: cMuted, 'stroke-width': 1 }, f.layers.axes);
+      svgEl('text', { x: sx(v), y: f.ih + 16, 'text-anchor': 'middle', 'font-size': 11, fill: cMuted, class: 'tick' }, f.layers.axes).textContent = String(v);
+    }
+    svgEl('line', { x1: 0, x2: f.iw, y1: f.ih, y2: f.ih, stroke: cMuted, 'stroke-width': 1 }, f.layers.axes);
+    svgEl('text', { x: sx((cols + 1) / 2), y: f.ih + Math.max(32, f.m.b - 8), 'text-anchor': 'middle', 'font-size': 12, fill: tok('--text'), 'font-weight': 500 }, f.layers.axes)
+      .textContent = order ? 'Replication' : 'Pair';
+    f.cats = { axis: 'x', at, labels: at.map(String) };
     const cEst = tok('--est'), cTruth = tok('--truth'), cPair = tok('--pair'), cCard = tok('--card'), cText = tok('--text');
-    const spacing = f.iw / cols;
+    const spacing = sx(2) - sx(1);
     const r = Math.max(2.2, Math.min(f.narrow ? 4 : 4.5, spacing * (order ? 0.45 : 0.36)));
     if (mu0 != null) {
       svgEl('line', { x1: 0, x2: f.iw, y1: sy(mu0), y2: sy(mu0), stroke: cText, 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, f.inner);
@@ -1165,7 +1217,27 @@ function drawPairs(d) {
       svgEl('circle', { cx: sx(xb[k]), cy: sy(b[k]), r, fill: cCard, stroke: cEst, 'stroke-width': 2 }, gB);
       svgEl('circle', { cx: sx(xa[k]), cy: sy(a[k]), r, fill: cEst, stroke: cCard, 'stroke-width': 1 }, gA);
     }
+    // The strip: a separator, a tick for each pair average, and the interval.
+    const rugX0 = cols + 0.5 + stripCols * 0.22, rugX1 = cols + 0.5 + stripCols * 0.5, ciX = cols + 0.5 + stripCols * 0.76;
+    if (ti) {
+      svgEl('line', { x1: sx(cols + 0.5 + stripCols * 0.08), x2: sx(cols + 0.5 + stripCols * 0.08), y1: 0, y2: f.ih, stroke: tok('--border'), 'stroke-width': 1 }, f.inner);
+      const gRug = svgEl('g', { class: 'm-pair-rug' }, f.inner);
+      for (const v of avg) svgEl('line', { x1: sx(rugX0), x2: sx(rugX1), y1: sy(v), y2: sy(v), stroke: cTruth, 'stroke-width': 1.2, opacity: 0.8 }, gRug);
+      const c = flagged ? tok('--miss') : cTruth;
+      const g = svgEl('g', { class: flagged ? 'm-int flagged' : 'm-int' }, f.inner);
+      const x = sx(ciX), y0 = sy(ti.lo), y1 = sy(ti.hi), ym = sy(ti.mean);
+      svgEl('line', { x1: x, x2: x, y1: y0, y2: y1, stroke: c, 'stroke-width': 2.5, 'stroke-dasharray': flagged ? '5,3' : null }, g);
+      for (const y of [y0, y1]) svgEl('line', { x1: x - 6, x2: x + 6, y1: y, y2: y, stroke: c, 'stroke-width': 2 }, g);
+      svgEl('circle', flagged ? { cx: x, cy: ym, r: 4.2, fill: cCard, stroke: c, 'stroke-width': 2 } : { cx: x, cy: ym, r: 4.2, fill: c }, g);
+    }
     if (mu0 != null) f.series.push({ kind: 'hline', y: mu0, color: cText, dash: true, label: 'stated mean mu0' });
+    if (ti) {
+      const c = flagged ? tok('--miss') : cTruth;
+      f.series.push({ kind: 'segments', x0: avg.map(() => rugX0), x1: avg.map(() => rugX1), y0: avg.slice(), y1: avg.slice(), color: cTruth, width: 1.2, label: 'pair average (rug)' },
+        { kind: 'segments', x0: [ciX, ciX - stripCols * 0.12, ciX - stripCols * 0.12], x1: [ciX, ciX + stripCols * 0.12, ciX + stripCols * 0.12], y0: [ti.lo, ti.lo, ti.hi], y1: [ti.hi, ti.lo, ti.hi],
+          color: c, width: 2.5, dash: flagged, label: intName + (flagged ? ' (excludes mu0)' : '') },
+        { kind: 'points', x: [ciX], y: [ti.mean], color: c, hollow: flagged, label: d.np ? 'pseudo-median of the pair averages' : 'mean of the pair averages' });
+    }
     f.series.push(order
       ? { kind: 'line', x: seqX, y: seqY, color: cPair, width: 1.2, label: 'replications in run order' }
       : { kind: 'segments', x0: ks, x1: ks, y0: a.slice(), y1: b.slice(), color: cPair, label: 'pair' },
@@ -1173,6 +1245,9 @@ function drawPairs(d) {
     { kind: 'points', x: xb.slice(), y: b.slice(), color: cEst, hollow: true, label: 'second replication of the pair' },
     { kind: 'points', x: xa.slice(), y: a.slice(), color: cEst, label: 'first replication of the pair' });
     f.readout((dx, dy, px) => {
+      if (ti && px > sx(cols + 0.5)) {
+        return [intName + ': [' + num(ti.lo) + ', ' + num(ti.hi) + ']', 'pair averages from ' + num(Math.min(...avg)) + ' to ' + num(Math.max(...avg))];
+      }
       const c = Math.round(sx.invert(px));
       if (c < 1 || c > cols || Math.abs(sx(c) - px) > Math.max(12, spacing / 2)) return null;
       const k = order ? Math.ceil(c / 2) - 1 : c - 1;
@@ -1187,13 +1262,19 @@ function drawPairs(d) {
   ];
   if (order) items.push({ swatch: 'thin', color: '--pair', label: 'replications in run order' });
   items.push({ swatch: 'line', color: '--truth', label: 'pair average, the replication value analyzed' });
+  if (ti) {
+    items.push({ swatch: 'thin', color: '--truth', label: 'each pair average, at the right edge' },
+      flagged ? { swatch: 'flagged', color: '--miss', label: intName + ': excludes μ₀' } : { swatch: 'interval', color: '--truth', label: intName });
+  }
   if (mu0 != null) items.push({ swatch: 'dash', color: '--text', label: 'stated mean μ₀' });
   legend(els.pairsLeg, items, pairsFig);
+  const strip = ti ? ' At the right edge, a tick for each pair average and the ' + intName + ' formed from them, on the scale of the replications.' : '';
+  const scale = shared ? ' The datasets loaded from this file share the scale, and so switching between them keeps every mark in place.' : '';
   els.pairsCap.textContent = order
     ? 'Each replication in the order it was run, the first of each pair filled and the second hollow, joined in sequence by the thin line; the heavy line is each pair’s average, drawn between its two replications. ' +
-      'In antithetic pairs the thin line zigzags, a busy run followed by a quiet one, and the pair averages stay closer to the mean than the replications do.'
+      'In antithetic pairs the thin line zigzags, a busy run followed by a quiet one, and the pair averages stay closer to the mean than the replications do.' + strip + scale
     : 'Each column is one pair: its first replication filled, its second hollow, and the line joining them the gap between the two. ' +
-      'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run with a quiet one, and so the heavy line of pair averages varies less than the dots do.';
+      'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run with a quiet one, and so the heavy line of pair averages varies less than the dots do.' + strip + scale;
 }
 
 function drawFigure(d) {
@@ -1222,7 +1303,9 @@ function drawFigure(d) {
   fig.render(f => {
     // Many pooled observations stack into a dot histogram, which needs room.
     f.setHeight(values.length > 300 ? 260 : (f.narrow ? 180 : 160));
-    f.x(extent(values, hasInt ? [ti.lo, ti.hi] : null, d.mu0 ? [d.mu0.value] : null), { pad: 0.06, nice: true });
+    // The pair-average sets one file holds share one scale (see pairsSpan).
+    const span = !pooled && (!tf || tf === 'none') ? pairsSpan(ds, np, false) : null;
+    f.x(extent(values, hasInt ? [ti.lo, ti.hi] : null, d.mu0 ? [d.mu0.value] : null, span), { pad: 0.06, nice: true });
     f.axes({ y: false, xLabel: outcomeAxis(ds, pooled, tf) });
     // The dots use the plotting area above the interval's band.
     const fullH = f.ih;

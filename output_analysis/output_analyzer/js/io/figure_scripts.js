@@ -125,11 +125,9 @@ export function call(L, name, pos, opts = {}) {
 function oneFigures(r, L) {
   const o = r.one, F = r.fig;
   const opts = { mean_line: L.bool(true) };
-  if (o.interval) {
-    const [m, lo, hi] = o.np ? [fld(L, 'sr', 'estimate'), fld(L, 'sr', 'lo'), fld(L, 'sr', 'hi')]
-      : [fld(L, 'd', 'mean'), fld(L, 'ti', 'lo'), fld(L, 'ti', 'hi')];
-    Object.assign(opts, { mid: vecOf(L, [m]), lo: vecOf(L, [lo]), hi: vecOf(L, [hi]) });
-  }
+  const [m, lo, hi] = o.np ? [fld(L, 'sr', 'estimate'), fld(L, 'sr', 'lo'), fld(L, 'sr', 'hi')]
+    : [fld(L, 'd', 'mean'), fld(L, 'ti', 'lo'), fld(L, 'ti', 'hi')];
+  if (o.interval) Object.assign(opts, { mid: vecOf(L, [m]), lo: vecOf(L, [lo]), hi: vecOf(L, [hi]) });
   if (F.mu0) opts.ref = 'mu0';
   const what = (o.np ? 'the Wilcoxon signed-rank interval on the pseudo-median' : 'the t interval on the mean');
   const notes = [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line; the interval is drawn red and dashed when it excludes mu0, which is when the test rejects it.' : '.')];
@@ -139,13 +137,17 @@ function oneFigures(r, L) {
   // which the data above do not hold, and their average, the outcome analyzed.
   if (F.pairs) {
     const n = F.pairs.first.length, order = !!F.pairs.order;
+    // The interval as a strip at the right edge, on the pairs' own scale only with no transform.
+    const strip = o.interval && (!r.transform || r.transform === 'none');
     calls.push(L.assign('pair_first', L.vec(F.pairs.first)), L.assign('pair_second', L.vec(F.pairs.second)),
       ...call(L, 'fig_pairs_by_rep', ['pair_first', 'pair_second', L.vec(Array.from({ length: order ? 2 * n : n }, (_, k) => k + 1))],
         { xlab: L.str(order ? 'Replication' : 'Pair'), title: L.str('Antithetic pairs'), labels: strsOf(L, ['first replication of the pair', 'second replication of the pair']),
           avg_line: L.bool(true), ylab: L.str(F.pairs.ylab), ref: F.mu0 && (!r.transform || r.transform === 'none') ? 'mu0' : undefined,
-          order: order ? L.bool(true) : undefined }));
+          order: order ? L.bool(true) : undefined, ci: strip ? vecOf(L, [lo, m, hi]) : undefined,
+          ci_flag: strip && F.mu0 ? orOf(L, lo + ' > mu0', hi + ' < mu0') : undefined }));
     notes.push('The antithetic pairs, the first replication of each filled and the second hollow' + (order ? ', in run order and joined in sequence,' : '') +
-      ' with the pair averages as a heavy line' + (F.mu0 && (!r.transform || r.transform === 'none') ? ' and mu0 dashed.' : '.'));
+      ' with the pair averages as a heavy line' + (F.mu0 && (!r.transform || r.transform === 'none') ? ' and mu0 dashed' : '') +
+      (strip ? ', and at the right edge a tick for each pair average beside the interval.' : '.'));
     fig.push('pairsByRep');
   }
   return { notes, calls, fig };

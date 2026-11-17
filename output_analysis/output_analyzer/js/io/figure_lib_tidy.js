@@ -258,10 +258,12 @@ FIG_TIDY.pairsByRep = `
 # (design B) as a hollow dot, joined by a dashed segment; avg_line adds the pair averages as a
 # heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each replication has
 # its own column, the pair's two side by side and all of them joined in run order by a light
-# line, with each pair average between its two; ids then label the 2n columns.
+# line, with each pair average between its two; ids then label the 2n columns. ci = c(lower,
+# center, upper) adds a strip at the right edge: a tick for each pair average and that interval,
+# in the flag color and dashed when ci_flag is TRUE.
 fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
                              labels = c("A", "B"), avg_line = FALSE, ylab = "Replication outcome",
-                             ref = NA, order = FALSE) {
+                             ref = NA, order = FALSE, ci = NULL, ci_flag = FALSE) {
   n <- length(a)
   if (n == 0) return(fig_empty(title, xlab, ylab))
   k <- seq_len(n)
@@ -290,6 +292,20 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   if (length(shown_lines)) {
     p <- p + scale_color_manual(values = c("run order" = FIG_MUTED, "pair average" = FIG_TRUTH)[shown_lines],
                                 breaks = shown_lines, name = NULL)
+  }
+  if (length(ci) == 3 && all(is.finite(ci))) {
+    s0 <- cols + 0.5
+    ci_col <- if (ci_flag) FIG_MISS else FIG_TRUTH
+    p <- p +
+      geom_vline(xintercept = s0 + 0.1, color = "gray85") +
+      geom_segment(data = mutate(both, m = (a + b) / 2), aes(x = s0 + 0.35, xend = s0 + 0.85, y = m, yend = m),
+                   color = FIG_TRUTH, linewidth = 0.4) +
+      annotate("segment", x = s0 + 1.35, xend = s0 + 1.35, y = ci[1], yend = ci[3], color = ci_col,
+               linewidth = 1, linetype = if (ci_flag) "dashed" else "solid") +
+      annotate("segment", x = s0 + 1.2, xend = s0 + 1.5, y = ci[c(1, 3)], yend = ci[c(1, 3)], color = ci_col,
+               linewidth = 0.8) +
+      annotate("point", x = s0 + 1.35, y = ci[2], shape = 21, size = 2.6, color = ci_col,
+               fill = if (ci_flag) "white" else ci_col)
   }
   p <- p +
     geom_point(data = long, aes(x = x, y = y, shape = design, fill = design), color = FIG_EST,

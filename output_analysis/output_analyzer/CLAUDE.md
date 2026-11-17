@@ -98,8 +98,14 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   second hollow, joined, with the pair averages as a heavy line and μ₀ dashed when the test is on
   and no transform is, or under a "Show the replications" switch (`pairsView`, a page setting)
   each replication in run order in its own column, all joined in sequence by a light line and
-  each pair average drawn between its two, which the scripts draw through `fig_pairs_by_rep`
-  with `avg_line` and, in run order, `order`; and in the same card a "Confidence interval on a quantile" sub-section
+  each pair average drawn between its two; with no transform, a strip at the right edge holds a
+  tick for each pair average and the page's interval (red and dashed when it excludes μ₀), and
+  the datasets loaded as pair averages from one file (one `loadId`) share one scale, here and on
+  the outcomes figure above, spanning every such set's points and interval at the page's level
+  and procedure (`pairsSpan`), so that switching between them keeps every mark in place, while a
+  set loaded on its own, or any dataset from another load, keeps its own scale; the scripts draw
+  the figure through `fig_pairs_by_rep` with `avg_line`, `order` in run order, and `ci` and
+  `ci_flag` for the strip, each script on its own data's scale; and in the same card a "Confidence interval on a quantile" sub-section
   (a one-row table: the point estimate Y₍⌈pR⌉₎, the distribution-free
   interval from two order statistics with α/2 of the binomial probability in each tail, the
   ranks SciPy's `quantile_test` returns, shown in brackets beside the ranks [r, s] and the

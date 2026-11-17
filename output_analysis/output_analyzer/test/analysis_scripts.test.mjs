@@ -2861,6 +2861,7 @@ test('Levene groups too large to embed are left out of a script that reads its f
     ['One System, t with a stated mean the interval excludes', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 10, qp: 0.5, view: { mu0: true } }), 1, true],
     ['One System, antithetic pairs with the stated mean', oneRecipe({ ds: antithetic, x: antithetic.reps.map(p => p.v[0]), ids: antithetic.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 0.8, qp: 0.5, view: { mu0: true } }), 2, true],
     ['One System, antithetic pairs in run order', oneRecipe({ ds: antithetic, x: antithetic.reps.map(p => p.v[0]), ids: antithetic.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95, plan: null, view: { pairsOrder: true } }), 2, true],
+    ['One System, antithetic pairs in run order with a stated mean the interval excludes', oneRecipe({ ds: antithetic, x: antithetic.reps.map(p => p.v[0]), ids: antithetic.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 0.9, qp: 0.5, view: { mu0: true, pairsOrder: true } }), 2],
     ['Two Systems, rank-sum', twoOf(IND_A, IND_B, 'np', 0.95, null), 2],
     ['Two Systems, paired, pairs by replication', pairedRecipe(CRN_A, CRN_B, 't', 'id', null, 0.95, { pairView: 'rep' }), 2, true],
     ['Two Systems, paired signed-rank, pairs as slopes', pairedRecipe(CRN_A, CRN_B, 'np', 'position', null, 0.95, { pairView: 'slope' }), 2],

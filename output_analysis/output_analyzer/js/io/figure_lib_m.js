@@ -395,7 +395,9 @@ function fig_pairs_by_rep(a, b, ids, o)
 % averages as a heavy line), ylab, ref (a dashed horizontal line), and order
 % (each replication in its own column, the pair's two side by side and all
 % of them joined in run order by a light line, with each pair average
-% between its two; ids then label the 2n columns).
+% between its two; ids then label the 2n columns), ci ([lower, center,
+% upper]: a strip at the right edge with a tick for each pair average and
+% that interval), and ci_flag (the interval in the flag color, dashed).
 if nargin < 4, o = struct(); end
 c = fig_colors();
 a = a(:);
@@ -424,8 +426,12 @@ end
 hold on;
 box on;
 ref = fig_opt(o, 'ref', NaN);
-xlim([0.5, cols + 0.5]);
-ylim(fig_pad(fig_range([a; b; ref(isfinite(ref))]), 0.08));
+ci = fig_opt(o, 'ci', []);
+ci = ci(:);
+strip = numel(ci) == 3 && all(isfinite(ci));
+if ~strip, ci = []; end
+xlim([0.5, cols + 0.5 + 1.8 * strip]);
+ylim(fig_pad(fig_range([a; b; ref(isfinite(ref)); ci]), 0.08));
 if isfinite(ref)
     plot([0.5, cols + 0.5], [ref, ref], 'Color', c.muted, 'LineStyle', '--');
 end
@@ -446,6 +452,20 @@ end
 ha = plot(xa, a, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 6);
 hb = plot(xb, b, 'o', 'Color', c.est, 'MarkerFaceColor', 'w', 'MarkerSize', 6, ...
           'LineWidth', 1.2);
+if strip
+    s0 = cols + 0.5;
+    plot([s0 + 0.1, s0 + 0.1], ylim(), 'Color', [0.85, 0.85, 0.85]);
+    m = (a + b) / 2;
+    [px, py] = fig_segments(s0 + 0.35 + 0 * m, m, s0 + 0.85 + 0 * m, m);
+    plot(px, py, 'Color', c.truth);
+    flag = fig_opt(o, 'ci_flag', false);
+    if flag, ci_col = c.miss; ls = '--'; face = 'w'; else, ci_col = c.truth; ls = '-'; face = c.truth; end
+    hc = plot([s0 + 1.35, s0 + 1.35], [ci(1), ci(3)], 'Color', ci_col, 'LineWidth', 2.5, 'LineStyle', ls);
+    plot([s0 + 1.2, s0 + 1.5; s0 + 1.2, s0 + 1.5]', [ci(1), ci(1); ci(3), ci(3)]', 'Color', ci_col, 'LineWidth', 2);
+    plot(s0 + 1.35, ci(2), 'o', 'Color', ci_col, 'MarkerFaceColor', face, 'MarkerSize', 6);
+    handles = [handles, hc];
+    names = [names, {'interval'}];
+end
 % Label at most about 20 columns.
 every = ceil(cols / 20);
 shown = 1:every:cols;

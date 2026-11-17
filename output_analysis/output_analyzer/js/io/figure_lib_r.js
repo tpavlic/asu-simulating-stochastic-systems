@@ -243,9 +243,11 @@ FIG_R.pairsByRep = `
 # averages as a heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each
 # replication has its own column, the pair's two side by side and all of them joined in run
 # order by a light line, with each pair average between its two; ids then label the 2n columns.
+# ci = c(lower, center, upper) adds a strip at the right edge: a tick for each pair average and
+# that interval, in the flag color and dashed when ci_flag is TRUE.
 fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
                              labels = c("A", "B"), avg_line = FALSE, ylab = "Replication outcome",
-                             ref = NA, order = FALSE) {
+                             ref = NA, order = FALSE, ci = NULL, ci_flag = FALSE) {
   a <- as.numeric(a)
   b <- as.numeric(b)
   n <- length(a)
@@ -263,8 +265,9 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   cols <- if (order) 2 * n else n
   ids <- rep_len(as.character(ids), cols)
   has_ref <- isTRUE(is.finite(ref))
-  plot(c(0.5, cols + 0.5), fig_ylim(c(a, b, if (has_ref) ref), 0.12), type = "n", axes = FALSE,
-       xlab = xlab, ylab = ylab, main = title)
+  strip <- length(ci) == 3 && all(is.finite(ci))
+  plot(c(0.5, cols + 0.5 + if (strip) 1.8 else 0), fig_ylim(c(a, b, if (has_ref) ref, if (strip) ci), 0.12),
+       type = "n", axes = FALSE, xlab = xlab, ylab = ylab, main = title)
   if (has_ref) abline(h = ref, lty = 2, col = FIG_MUTED)
   if (order) {
     lines(as.vector(rbind(xa, xb)), as.vector(rbind(a, b)), col = FIG_MUTED)
@@ -275,6 +278,15 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   if (avg_line) lines(xm, (a + b) / 2, col = FIG_TRUTH, lwd = 3)
   points(xa, a, pch = 19, col = FIG_EST)
   points(xb, b, pch = 21, col = FIG_EST, bg = "white")
+  if (strip) {
+    s0 <- cols + 0.5
+    abline(v = s0 + 0.1, col = "gray85")
+    segments(s0 + 0.35, (a + b) / 2, s0 + 0.85, (a + b) / 2, col = FIG_TRUTH)
+    ci_col <- if (ci_flag) FIG_MISS else FIG_TRUTH
+    segments(s0 + 1.35, ci[1], s0 + 1.35, ci[3], col = ci_col, lwd = 2.5, lty = if (ci_flag) 2 else 1)
+    segments(s0 + 1.2, ci[c(1, 3)], s0 + 1.5, ci[c(1, 3)], col = ci_col, lwd = 2)
+    points(s0 + 1.35, ci[2], pch = if (ci_flag) 21 else 19, col = ci_col, bg = "white")
+  }
   shown <- unique(round(seq(1, cols, length.out = min(cols, 20))))
   axis(1, at = shown, labels = ids[shown])
   axis(2, las = 1)
@@ -289,6 +301,10 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   }
   if (avg_line) {
     names <- c(names, "pair average"); pch <- c(pch, NA); lty <- c(lty, 1); lwd <- c(lwd, 3); col <- c(col, FIG_TRUTH)
+  }
+  if (strip) {
+    names <- c(names, "interval"); pch <- c(pch, NA); lty <- c(lty, if (ci_flag) 2 else 1); lwd <- c(lwd, 2.5)
+    col <- c(col, if (ci_flag) FIG_MISS else FIG_TRUTH)
   }
   legend("top", legend = names, pch = pch, lty = lty, lwd = lwd, col = col, pt.bg = "white",
          horiz = TRUE, bty = "n")
