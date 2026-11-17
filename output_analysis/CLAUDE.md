@@ -23,7 +23,10 @@ messages) are in the root `CLAUDE.md`.
   name in full the strip needs 977px of the widget's 984px; tabs ③–⑤ apply
   common random numbers, antithetic variates, and control variates to a
   shared five-model menu (the identity, exp(u), √u, 1/(1 + u), and the bowl) whose exact moments the
-  verify script pins, each as a plain history over an improved one on a shared scale; tab ⑥ applies
+  verify script pins, each as a plain history over an improved one on a shared scale (tab ④'s
+  draw-order panel also switches between the outputs in run order, joined in sequence, and as
+  pairs, each pair's two in one column, with the pair means a heavy solid line and E[h] dashed,
+  as the Output Analyzer draws its antithetic pairs); tab ⑥ applies
   importance sampling to a normal input through its own three-model menu (x, exp(x), and x²), with
   the threshold on the output scale, the shift aimed at the input threshold, and closed-form tail
   probabilities. Conventions relied on by code outside the file, which any later edit has to

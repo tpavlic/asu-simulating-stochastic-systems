@@ -1063,8 +1063,14 @@ svg.pi-wsv { display: block; width: 100%; height: auto; touch-action: pan-y; cur
       </div>
     </div>
     <div class="cv-card">
-      <div class="sec-hd" id="av-seq-title" style="margin:0 0 9px">One run, in draw order: the 2n outputs and their pair means</div>
-      <svg class="fig" id="av-seq" role="img" aria-label="The 2n outputs of one run plotted in the order drawn, pairs joined, with the pair means, the true mean, and a strip at the right showing the shown arm's own rug of pair means beside its confidence interval for E[h]; the current arm (independent or antithetic) follows the figure above's own toggle, on one fixed scale"></svg>
+      <div class="seq-hd">
+        <span class="sec-hd" id="av-seq-title" style="margin:0">One run, in draw order: the 2n outputs and their pair means</span>
+        <span class="seg" role="group" aria-label="How the outputs are laid out">
+          <button type="button" class="seg-btn" id="av-seq-order" aria-pressed="true" onclick="avSeqView('order')">In run order</button>
+          <button type="button" class="seg-btn" id="av-seq-pairs" aria-pressed="false" onclick="avSeqView('pairs')">As pairs</button>
+        </span>
+      </div>
+      <svg class="fig" id="av-seq" role="img" aria-label="The 2n outputs of one run, in the order drawn and joined in sequence or grouped as pairs, with the pair means as a heavy line, the true mean dashed, and a strip at the right showing the shown arm's own rug of pair means beside its confidence interval for E[h]; the current arm (independent or antithetic) follows the figure above's own toggle, on one fixed scale"></svg>
       <div class="cv-leg" id="av-seq-leg"></div>
       <div class="fig-note" id="av-seq-note"></div>
     </div>
@@ -4616,7 +4622,7 @@ function fnCurve(f) {
   const pad = (hi - lo) * 0.08 || 0.1;
   return { pts: pts, lo: lo - pad, hi: hi + pad };
 }
-const AVS = { ind: [], av: [], last: null, lastRunObj: null, lastRunP: null, mode: 'ind', lastSeed: null, scale: null };
+const AVS = { ind: [], av: [], last: null, lastRunObj: null, lastRunP: null, mode: 'ind', seqView: 'order', lastSeed: null, scale: null };
 // The one toggle for tab ④'s whole single-run region (the figure, its rug-and-
 // interval strip, and the draw-order panel below it): which arm's pairs they show.
 // Redraws from the last run if there is one, or the empty state otherwise.
@@ -4627,6 +4633,14 @@ function avMode(m) {
   const p = AVS.lastRunP || avParams();
   if (p) drawAvFig(AVS.lastRunObj, p);
   if (typeof drawAvSeq === 'function') drawAvSeq(AVS.lastRunObj, p);
+}
+// The draw-order panel's own switch: the outputs in the order drawn, joined in
+// sequence, or grouped as pairs, each pair's two in one column.
+function avSeqView(v) {
+  AVS.seqView = v;
+  $('av-seq-order').setAttribute('aria-pressed', String(v === 'order'));
+  $('av-seq-pairs').setAttribute('aria-pressed', String(v === 'pairs'));
+  drawAvSeq(AVS.lastRunObj, AVS.lastRunP || avParams());
 }
 function avParams() {
   const sigE = readNum('av-sige', 'av-par-msg', 0, 1e6, 'the noise scale σ');
@@ -4701,7 +4715,7 @@ function avFigLegendHtml(mode) {
   return `<span style="color:var(--truth)"><span class="lg-s">—</span>h(u) and its mean</span>`
     + `<span style="color:var(--est)"><span class="lg-s">●</span>first of the pair</span>`
     + `<span style="color:var(--est)"><span class="lg-s">○</span>second</span>`
-    + `<span style="color:var(--est)"><span class="lg-s">‒</span>pair means ${rugLabel}</span>`
+    + `<span style="color:var(--truth)"><span class="lg-s">‒</span>pair means ${rugLabel}</span>`
     + `<span><span class="lg-s lg-wide" style="color:var(--hit)">⊢●⊣</span>interval for E[h] (teal captures, red dashed misses)</span>`;
 }
 // The rug-and-interval strip shared by drawAvFig and drawAvSeq: one column for the
@@ -4720,7 +4734,7 @@ function drawPairStrip(stripX0, stripW, pT, yP, mode, run, p) {
   if (!run) return h;
   const pairMeans = mode === 'av' ? run.z : run.w;
   const rugOpacity = p.n > 100 ? 0.7 : 1;
-  pairMeans.forEach(v => { const y = yP(v); h += `<line x1="${rugX - 4}" y1="${y}" x2="${rugX + 4}" y2="${y}" stroke="${C.est}" stroke-width="1" opacity="${rugOpacity}"/>`; });
+  pairMeans.forEach(v => { const y = yP(v); h += `<line x1="${rugX - 4}" y1="${y}" x2="${rugX + 4}" y2="${y}" stroke="${C.truth}" stroke-width="1" opacity="${rugOpacity}"/>`; });
   const iv = mode === 'av' ? run.av : run.ind, hit = mode === 'av' ? run.hitAv : run.hitInd;
   h += svgIntervalMark(barX, yP(iv.hi), yP(iv.lo), yP(iv.mean), hit);
   return h;
@@ -4801,31 +4815,34 @@ function drawAvFig(run, p) {
 // Tab ④'s draw-order panel: the same run's 2n outputs, in the order the stream
 // produced them. It carries no toggle of its own -- it reads AVS.mode, the same
 // state the figure above's segmented control sets, and so the two always agree.
-function avSeqTitle(mode) {
-  return 'One run, in draw order: the 2n outputs and their pair means – ' + (mode === 'av' ? 'antithetic' : 'independent');
+function avSeqTitle(mode, view) {
+  return 'One run, ' + (view === 'pairs' ? 'as pairs' : 'in draw order') + ': the 2n outputs and their pair means – ' + (mode === 'av' ? 'antithetic' : 'independent');
 }
 // mode picks the rug/interval strip's own label (z / w), matching avFigLegendHtml's
 // identical item -- this panel draws that same strip via drawPairStrip, and had no
 // legend entry for it until now.
-function avSeqLegendHtml(mode) {
+function avSeqLegendHtml(mode, view) {
   const rugLabel = mode === 'av' ? 'z (antithetic)' : 'w (independent)';
   return `<span style="color:${C.est}"><span class="lg-s">●</span>first of a pair</span>`
     + `<span style="color:${C.est}"><span class="lg-s">○</span>second</span>`
-    + `<span style="color:${C.pair}"><span class="lg-s">|</span>joins a pair</span>`
-    + `<span style="color:${C.est}"><span class="lg-s">‒</span>pair means ${rugLabel} (strip rug)</span>`
-    + `<span style="color:${C.pair}"><span class="lg-s">┄</span>pair means (path)</span>`
+    + (view === 'pairs' ? `<span style="color:${C.pair}"><span class="lg-s">|</span>joins a pair</span>`
+      : `<span style="color:${C.pair}"><span class="lg-s">—</span>outputs in draw order</span>`)
+    + `<span style="color:${C.truth}"><span class="lg-s">━</span>pair means</span>`
+    + `<span style="color:${C.truth}"><span class="lg-s">‒</span>pair means ${rugLabel} (strip rug)</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">┄</span>E[h]</span>`
     + `<span><span class="lg-s lg-wide" style="color:${C.hit}">⊢●⊣</span>interval for E[h] (teal captures, red dashed misses)</span>`;
 }
 function drawAvSeq(run, p) {
-  const mode = AVS.mode;
-  $('av-seq-title').textContent = avSeqTitle(mode);
+  const mode = AVS.mode, view = AVS.seqView;
+  $('av-seq-title').textContent = avSeqTitle(mode, view);
   // A rug-and-interval strip identical to drawAvFig's own sits at the right, on
   // this panel's own y-scale, and so the two cards visibly share one run.
   const stripGap = 10, stripW = 42;
   const W = figWidth($('av-seq')), H = 190, pL = 56, pR = stripGap + stripW, pT = 14, pB = 34, cW = W - pL - pR, cH = H - pT - pB;
   const f = CI.FUNCS[p.fn], n = p.n, count = 2 * n;
-  const xP = k => pL + (k - 1) / (count - 1) * cW; // k is the 1-indexed draw order
+  // k is the 1-indexed draw order, or as pairs the 1-indexed pair.
+  const cols = view === 'pairs' ? n : count;
+  const xP = k => pL + (k - 1) / Math.max(1, cols - 1) * cW;
   let lo, hi;
   if (run) {
     // Locked at run time (AVS.scale.seq), separately from drawAvFig's
@@ -4849,7 +4866,7 @@ function drawAvSeq(run, p) {
   h += `<text x="${pL + cW - 3}" y="${yP(f.mean) - 4}" text-anchor="end" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}">E[h] = ${f.mean.toFixed(4)}</text>`;
   const dec = decFor(hi - lo);
   for (let i = 0; i <= 3; i++) { const y = lo + (hi - lo) * i / 3; h += `<text x="${pL - 5}" y="${yP(y) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${y.toFixed(dec)}</text>`; }
-  h += `<text x="${pL + cW / 2}" y="${pT + cH + 28}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">draw order (pairs adjacent)</text>`;
+  h += `<text x="${pL + cW / 2}" y="${pT + cH + 28}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">${view === 'pairs' ? 'pair' : 'draw order'}</text>`;
   const yLX = 13, yLY = pT + cH / 2;
   h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">y = h(u) + noise</text>`;
 
@@ -4857,7 +4874,7 @@ function drawAvSeq(run, p) {
     h += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
     h += `<text x="${pL + cW / 2}" y="${pT + cH / 2}" text-anchor="middle" fill="${C.muted}" font-size="11" font-family="${FF_SANS}">Run an experiment to see one run's outputs in draw order</text>`;
     svgSet($('av-seq'), W, H, h);
-    $('av-seq-leg').innerHTML = avSeqLegendHtml(mode);
+    $('av-seq-leg').innerHTML = avSeqLegendHtml(mode, view);
     setFigNote('av-seq-note', '');
     return;
   }
@@ -4873,33 +4890,44 @@ function drawAvSeq(run, p) {
   // the interval's own mean dot outside the clip so it stays visible even when
   // its bar clips (the same rule, generalized). N of the drawn dots beyond the
   // scale is also reported in this panel's own note, unlike drawAvFig's.
+  // In draw order, each output has its own column and a light line joins them
+  // all in sequence; as pairs, a pair's two outputs share a column, joined. The
+  // pair means are a heavy line either way, between a pair's two outputs in
+  // draw order and through its column as pairs.
+  const xOf = i => (view === 'pairs' ? xP(Math.floor(i / 2) + 1) : xP(i + 1)); // i is the 0-indexed output
+  const xMean = j => (view === 'pairs' ? xP(j + 1) : xP(2 * j + 1.5));
   let hClip = '';
-  for (let j = 0; j < drawCount / 2; j++) {
-    hClip += `<line x1="${xP(2 * j + 1)}" y1="${yP(seq[2 * j])}" x2="${xP(2 * j + 2)}" y2="${yP(seq[2 * j + 1])}" stroke="${C.pair}" stroke-width="1"/>`;
+  if (view === 'pairs') {
+    for (let j = 0; j < drawCount / 2; j++) {
+      hClip += `<line x1="${xP(j + 1)}" y1="${yP(seq[2 * j])}" x2="${xP(j + 1)}" y2="${yP(seq[2 * j + 1])}" stroke="${C.pair}" stroke-width="1.2"/>`;
+    }
+  } else {
+    let seqPts = '';
+    for (let i = 0; i < drawCount; i++) seqPts += (i ? 'L' : 'M') + xP(i + 1).toFixed(1) + ',' + yP(seq[i]).toFixed(1);
+    hClip += `<path d="${seqPts}" fill="none" stroke="${C.pair}" stroke-width="1" stroke-linejoin="round"/>`;
   }
   let pmPts = '';
-  for (let j = 0; j < n; j++) {
-    const xm = xP(2 * j + 1.5);
-    pmPts += (j ? 'L' : 'M') + xm.toFixed(1) + ',' + yP(pairMeans[j]).toFixed(1);
+  for (let j = 0; j < drawCount / 2; j++) {
+    pmPts += (j ? 'L' : 'M') + xMean(j).toFixed(1) + ',' + yP(pairMeans[j]).toFixed(1);
   }
-  hClip += `<path d="${pmPts}" fill="none" stroke="${C.pair}" stroke-width="1.3" stroke-dasharray="3,2.5"/>`;
+  hClip += `<path d="${pmPts}" fill="none" stroke="${C.truth}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`;
   // Two passes -- every hollow dot, and then every filled dot -- matching drawAvFig's
   // own fix: no coincidence is possible along one draw-order axis the way it is
   // between two different x positions in the scatter above, but the same paint
   // order keeps both panels consistent.
   let clipped = 0;
   for (let i = 0; i < drawCount; i++) { if (seq[i] < lo || seq[i] > hi) clipped++; }
-  for (let i = 1; i < drawCount; i += 2) { hClip += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`; }
-  for (let i = 0; i < drawCount; i += 2) { hClip += `<circle cx="${xP(i + 1)}" cy="${yP(seq[i])}" r="${r}" fill="${C.est}" opacity=".85"/>`; }
+  for (let i = 1; i < drawCount; i += 2) { hClip += `<circle cx="${xOf(i)}" cy="${yP(seq[i])}" r="${r - 0.4}" fill="#fff" stroke="${C.est}" stroke-width="1.4"/>`; }
+  for (let i = 0; i < drawCount; i += 2) { hClip += `<circle cx="${xOf(i)}" cy="${yP(seq[i])}" r="${r}" fill="${C.est}" opacity=".85"/>`; }
   hClip += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
   h += `<defs><clipPath id="av-seq-clip"><rect x="${pL}" y="${pT}" width="${cW + stripGap + stripW}" height="${cH}"/></clipPath></defs>`;
   h += `<g clip-path="url(#av-seq-clip)">${hClip}</g>`;
   const ivMode = mode === 'av' ? run.av : run.ind, ivHit = mode === 'av' ? run.hitAv : run.hitInd;
   h += intervalMeanDot(pL + cW + stripGap + stripW * 0.75, yP(ivMode.mean), ivHit);
-  [1, n, count].forEach(k => { h += `<text x="${xP(k)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${k}</text>`; });
+  (view === 'pairs' ? [1, n] : [1, n, count]).forEach(k => { h += `<text x="${xP(k)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${k}</text>`; });
   svgSet($('av-seq'), W, H, h);
-  $('av-seq-leg').innerHTML = avSeqLegendHtml(mode);
-  let note = count > 400 ? 'The first 400 of the ' + count.toLocaleString() + ' dots are shown.' : '';
+  $('av-seq-leg').innerHTML = avSeqLegendHtml(mode, view);
+  let note = count > 400 ? 'The first ' + (view === 'pairs' ? '200 of the ' + n.toLocaleString() + ' pairs are' : '400 of the ' + count.toLocaleString() + ' dots are') + ' shown.' : '';
   if (clipped > 0) note += (note ? ' ' : '') + 'Of the ' + drawCount.toLocaleString() + ' dots drawn, ' + clipped.toLocaleString() + ' lie beyond the panel\'s fixed scale.';
   setFigNote('av-seq-note', note);
 }
