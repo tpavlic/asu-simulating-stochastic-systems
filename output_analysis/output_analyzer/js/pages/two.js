@@ -191,7 +191,9 @@ function clip(s, maxW, size) {
 /**
  * Rows of replication outcomes, one row per design: the dots of the row's
  * values stacked to avoid overlap, and under them the row's mean with its
- * interval. An optional dashed reference line marks `ref`.
+ * interval. An optional dashed reference line marks `ref`, and a row's
+ * interval that excludes it is flagged as the difference plot flags one that
+ * excludes 0: the flag color, dashed, with a hollow center dot.
  * @param {Object} fig a plots.js figure
  * @param {{label: string, values: ArrayLike<number>, names: string[], mean: number, lo: number, hi: number}[]} rows
  * @param {{ref?: number|null}} o
@@ -207,7 +209,7 @@ function strips(fig, rows, o = {}) {
   const sx = fig.x(extent(all), { pad: 0.06, nice: true });
   fig.axes({ y: false });
   const rowH = fig.ih / n;
-  const cEst = tok('--est'), cTruth = tok('--truth'), cCard = tok('--card'), cText = tok('--text'), cMuted = tok('--muted'), cBorder = tok('--border');
+  const cEst = tok('--est'), cTruth = tok('--truth'), cCard = tok('--card'), cText = tok('--text'), cMuted = tok('--muted'), cBorder = tok('--border'), cMiss = tok('--miss');
   const ry = recordRows(fig, rows.map(r => r.label));
   if (o.ref !== undefined && o.ref !== null) {
     const x = sx(o.ref);
@@ -219,6 +221,8 @@ function strips(fig, rows, o = {}) {
   const dotsRec = { kind: 'points', x: [], y: [], color: cEst, label: 'one replication outcome' };
   const intRec = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cTruth, label: 'interval' };
   const meanRec = { kind: 'points', x: [], y: [], color: cTruth, label: 'mean' };
+  const flagIntRec = { kind: 'segments', x0: [], x1: [], y0: [], y1: [], color: cMiss, dash: true, label: 'interval (excludes the reference)' };
+  const flagMeanRec = { kind: 'points', x: [], y: [], color: cMiss, hollow: true, label: 'mean' };
   rows.forEach((row, ri) => {
     const top = ri * rowH;
     if (ri > 0) svgEl('line', { x1: 0, x2: fig.iw, y1: top, y2: top, stroke: cBorder, 'stroke-width': 1 }, fig.inner);
@@ -248,18 +252,22 @@ function strips(fig, rows, o = {}) {
     if (Number.isFinite(row.lo) && Number.isFinite(row.hi)) {
       const x0 = sx(row.lo), x1 = sx(row.hi);
       const yi = yRow - 0.3;
-      intRec.x0.push(row.lo, row.lo, row.hi); intRec.x1.push(row.hi, row.lo, row.hi); intRec.y0.push(yi, yi - 0.08, yi - 0.08); intRec.y1.push(yi, yi + 0.08, yi + 0.08);
-      meanRec.x.push(row.mean); meanRec.y.push(yi);
-      const gi = svgEl('g', { class: 'm-int' }, fig.inner);
-      svgEl('line', { x1: x0, x2: x1, y1: cyInt, y2: cyInt, stroke: cTruth, 'stroke-width': 2 }, gi);
-      for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cyInt - 5, y2: cyInt + 5, stroke: cTruth, 'stroke-width': 2 }, gi);
-      svgEl('circle', { cx: sx(row.mean), cy: cyInt, r: 4.2, fill: cTruth }, gi);
+      const flagged = o.ref !== undefined && o.ref !== null && (row.lo > o.ref || row.hi < o.ref);
+      const c = flagged ? cMiss : cTruth;
+      const iR = flagged ? flagIntRec : intRec, mR = flagged ? flagMeanRec : meanRec;
+      iR.x0.push(row.lo, row.lo, row.hi); iR.x1.push(row.hi, row.lo, row.hi); iR.y0.push(yi, yi - 0.08, yi - 0.08); iR.y1.push(yi, yi + 0.08, yi + 0.08);
+      mR.x.push(row.mean); mR.y.push(yi);
+      const gi = svgEl('g', { class: flagged ? 'm-int flagged' : 'm-int' }, fig.inner);
+      svgEl('line', { x1: x0, x2: x1, y1: cyInt, y2: cyInt, stroke: c, 'stroke-width': 2, 'stroke-dasharray': flagged ? '5,3' : null }, gi);
+      for (const x of [x0, x1]) svgEl('line', { x1: x, x2: x, y1: cyInt - 5, y2: cyInt + 5, stroke: c, 'stroke-width': 2 }, gi);
+      svgEl('circle', flagged ? { cx: sx(row.mean), cy: cyInt, r: 4.2, fill: cCard, stroke: c, 'stroke-width': 2 } : { cx: sx(row.mean), cy: cyInt, r: 4.2, fill: c }, gi);
     }
     const t = svgEl('text', { x: -10, y: top + rowH / 2 + 4, 'text-anchor': 'end', 'font-size': fs, fill: cText }, fig.layers.axes);
     t.textContent = clip(row.label, lw - 6, fs);
   });
   fig.series.push(dotsRec);
   if (intRec.x0.length) fig.series.push(intRec, meanRec);
+  if (flagIntRec.x0.length) fig.series.push(flagIntRec, flagMeanRec);
   fig.readout((dx, dy, px, py) => {
     let best = null, bd = Infinity;
     for (const p of placed) { const d = Math.hypot(p.cx - px, p.cy - py); if (d < bd) { bd = d; best = p; } }
@@ -1189,7 +1197,7 @@ function renderPaired(res, notes, d, level, blank) {
   const leg1 = document.createElement('div');
   f.appendChild(leg1);
   f.appendChild(caption('Each dot is one matched pair’s difference A − B; under the dots is ' + (np ? 'the pseudo-median of the differences (the Hodges–Lehmann estimate) with its ' + L + ' Wilcoxon signed-rank interval' : 'the mean difference with its ' + L + ' paired t interval') +
-    '. The dashed line marks zero difference.'));
+    '. The dashed line marks zero difference; an interval that excludes zero is drawn red and dashed.'));
   const [labA, labB] = d ? roleLabels(d.dsA, d.dsB) : ['A', 'B'];
   pairViews(f, pr ? { a: x, b: y, names: pairIds, byId: d.match.by === 'id', labA, labB, meanD: pr.meanD, r: pr.r, sdD: pr.sdD } : null);
   if (pr) {
@@ -1200,7 +1208,9 @@ function renderPaired(res, notes, d, level, blank) {
   exportButtons(box1, fig1, 'two-systems-paired-differences');
   legend(leg1, [
     { swatch: 'dot', color: '--est', label: 'one matched pair’s difference' },
-    { swatch: 'interval', color: '--truth', label: (np ? 'pseudo-median of the differences with its ' : 'mean difference with its ') + (shown ? shown.name : L + (np ? ' Wilcoxon signed-rank interval' : ' paired t interval')) },
+    excludes
+      ? { swatch: 'flagged', color: '--miss', label: (np ? 'pseudo-median of the differences with its ' : 'mean difference with its ') + shown.name + ', which excludes 0' }
+      : { swatch: 'interval', color: '--truth', label: (np ? 'pseudo-median of the differences with its ' : 'mean difference with its ') + (shown ? shown.name : L + (np ? ' Wilcoxon signed-rank interval' : ' paired t interval')) },
     { swatch: 'dash', color: '--muted', label: 'zero difference' }
   ], fig1);
 
