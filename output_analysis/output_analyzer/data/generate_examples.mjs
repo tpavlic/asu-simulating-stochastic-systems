@@ -11,10 +11,12 @@
 // of them also draws some designs' service times from an Erlang distribution with k phases (the
 // sum of k exponential draws of mean 1/(k mu)), whose standard deviation is 1/sqrt(k) of its mean.
 //
-// One example instead simulates a batch oven: a call for 2 to 12 muffins (uniform) arrives each
-// minute from minute 0 to minute 30, and the oven, which holds 30 muffins and bakes them for a
-// fixed time, is loaded oldest first (a call split at the capacity) whenever it is empty and at
-// least a threshold number of muffins wait. The run stops at minute 30.
+// One example is not simulated here: it holds the runs of a batch oven, in which a call for 2 to
+// 12 muffins (uniform) arrives each minute from minute 0 to minute 30, and the oven, which holds
+// 30 muffins and bakes them for 3 minutes, is loaded oldest first (a call split at the capacity)
+// whenever it is empty and at least a threshold number of muffins wait. The run stops at minute
+// 30. Its rows, in OVEN_RUNS below, are the outputs of a hand-simulation exercise's ten demand
+// streams, numbered 0 to 9 as the exercise numbers them; the streams themselves are not published.
 //
 // Randomness: mulberry32 streams, with exponential draws by inverse transform, -ln(1 - u) * mean.
 // Each replication uses two streams, one for arrivals and one for services, seeded from a base
@@ -48,10 +50,10 @@
 //   service_level.csv          designs A..C (mean service 0.5, 0.7, 0.8), 15 days each, independent:
 //                              each day's fraction of customers who waited less than 2 minutes
 //   muffin_oven.csv            a batch oven loaded greedily (threshold 1) or nearly full (threshold
-//                              20) at a bake time of 4 minutes, 10 replications whose demand stream
+//                              20) at a bake time of 3 minutes, 10 replications whose demand stream
 //                              is shared by both policies: four outputs per run (average time in
 //                              system, utilization, most muffins waiting, muffins unfinished), the
-//                              stream in a column headed block
+//                              stream in a column headed block; written in, not simulated
 //   utilization.csv            designs A..C (mean service 0.4, 1.0, 1.8 at mean interarrival 2.0),
 //                              12 days of 480 minutes each, independent: whether the server is busy,
 //                              recorded at every change
@@ -82,8 +84,7 @@ const SEEDS = {
   steady: 97001,
   queueLength: 101000,
   serviceLevel: [170000, 176000, 182000],
-  utilization: [190000, 196000, 202000],
-  oven: 1190000
+  utilization: [190000, 196000, 202000]
 };
 
 function mulberry32(seed) {
@@ -215,48 +216,6 @@ function servedWithRoom(st, meanArr, meanSrv, room, endTime, phases = 1) {
   return served;
 }
 
-/**
- * One run of the batch oven against the call sizes `sizes` (one per minute from minute 0), with
- * at one time an arrival handled before a departure. Returns the average time in system of the
- * muffins that left, the time average of the fraction of the oven in use, the most muffins ever
- * waiting, and the muffins still in the system at the end.
- */
-function ovenRun(threshold, sizes, bake, { cap = 30, end = 30 } = {}) {
-  let clk = 0, waiting = 0, baking = 0, used = 0, tisSum = 0, done = 0, usedArea = 0, maxWaiting = 0, next = 0;
-  // Every call still in the system, oldest first; those baking lead.
-  const line = [];
-  const events = [{ kind: 1, t: 0 }, { kind: -1, t: end }];
-  while (events.length) {
-    events.sort((a, b) => a.t - b.t || b.kind - a.kind);
-    if (events[0].t > clk || events[0].kind === -1) { usedArea += used * (events[0].t - clk); maxWaiting = Math.max(maxWaiting, waiting); }
-    const e = events.shift();
-    clk = e.t;
-    if (e.kind === -1) break;
-    if (e.kind === 1) {
-      line.push({ arrival: clk, size: sizes[next] });
-      waiting += sizes[next++];
-      if (next < sizes.length) events.push({ kind: 1, t: clk + 1 });
-    } else {
-      const c = line.shift();
-      tisSum += (clk - c.arrival) * c.size; done += c.size;
-      baking -= c.size; used = baking / cap;
-    }
-    if (baking === 0 && waiting >= threshold) {
-      for (let k = 0; k < line.length; k++) {
-        if (baking + line[k].size > cap) {
-          const part = { arrival: line[k].arrival, size: cap - baking };
-          line[k].size -= part.size;
-          line.splice(k, 0, part);
-        }
-        events.push({ kind: 0, t: clk + bake });
-        baking += line[k].size; waiting -= line[k].size; used = baking / cap;
-        if (baking === cap) break;
-      }
-    }
-  }
-  return { tis: tisSum / done, utilization: usedArea / clk, maxWaiting, unfinished: waiting + baking };
-}
-
 /** At most four decimals, no trailing zeros. */
 const fmt = (x) => String(Number(x.toFixed(4)));
 
@@ -316,16 +275,31 @@ function utilizationCsv(designs, reps) {
   return lines.join('\n') + '\n';
 }
 
-/** Two loading policies of the batch oven, each replication's demand stream shared by both. */
-function ovenCsv(policies, bake, reps) {
+/**
+ * The batch oven's runs, per policy: the demand stream's number, the average time in system of the
+ * muffins that left, the time average of the fraction of the oven in use, the most muffins ever
+ * waiting, and the muffins still in the system at the end.
+ */
+const OVEN_RUNS = {
+  greedy: [
+    [0, 3.9278, 0.6467, 19, 18], [1, 3.9665, 0.5967, 20, 23], [2, 3.9211, 0.6333, 19, 23],
+    [3, 3.9596, 0.7433, 18, 28], [4, 4.0521, 0.64, 21, 21], [5, 3.945, 0.6667, 18, 23],
+    [6, 3.922, 0.6833, 23, 15], [7, 3.8762, 0.6733, 17, 15], [8, 4.1126, 0.74, 27, 17],
+    [9, 3.8962, 0.61, 18, 22]
+  ],
+  nearly_full: [
+    [0, 4.1546, 0.6467, 22, 18], [1, 4.257, 0.5967, 20, 23], [2, 4.1784, 0.64, 19, 28],
+    [3, 4.1505, 0.7467, 23, 45], [4, 4.1629, 0.6489, 21, 35], [5, 4.0538, 0.6733, 18, 37],
+    [6, 4.0927, 0.6833, 19, 15], [7, 4.0269, 0.6511, 19, 31], [8, 4.1351, 0.74, 27, 17],
+    [9, 4.1386, 0.5867, 19, 39]
+  ]
+};
+
+/** Two loading policies of the batch oven, each demand stream shared by both. */
+function ovenCsv(runs) {
   const lines = ['policy,block,avg_time_in_system,utilization,max_waiting,unfinished'];
-  for (const { name, threshold } of policies) {
-    for (let r = 1; r <= reps; r++) {
-      const u = mulberry32(SEEDS.oven + r);
-      const sizes = Array.from({ length: 31 }, () => 2 + Math.floor(u() * 11));
-      const o = ovenRun(threshold, sizes, bake);
-      lines.push(`${name},${r},${fmt(o.tis)},${fmt(o.utilization)},${o.maxWaiting},${o.unfinished}`);
-    }
+  for (const [name, rows] of Object.entries(runs)) {
+    for (const row of rows) lines.push(`${name},${row.join(',')}`);
   }
   return lines.join('\n') + '\n';
 }
@@ -387,8 +361,8 @@ function entries() {
     {
       id: 'muffin-oven', title: 'Paired comparison, four outputs (muffin oven, 2 policies)', file: 'muffin_oven.csv',
       kind: 'reps', format: 'columns',
-      description: 'An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, which the file\'s block column names, and each run reports the average time in system of the muffins that finished, the oven\'s utilization, the most muffins ever waiting, and the muffins unfinished at the end. Two Systems opens the two policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.',
-      text: ovenCsv([{ name: 'greedy', threshold: 1 }, { name: 'nearly_full', threshold: 20 }], 4, 10),
+      description: 'An oven that holds 30 muffins and bakes them for 3 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, which the file\'s block column names, and each run reports the average time in system of the muffins that finished, the oven\'s utilization, the most muffins ever waiting, and the muffins unfinished at the end. Two Systems opens the two policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system and the muffins unfinished both favor the greedy policy, but the utilization and the most muffins waiting cannot tell the two policies apart.',
+      text: ovenCsv(OVEN_RUNS),
       mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, blocks: true, name: 'Muffin oven' }
     },
     {

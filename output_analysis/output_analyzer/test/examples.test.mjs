@@ -71,10 +71,11 @@ test('the service-level and utilization examples show the transforms their descr
   assert.ok(p('utilization', 'none') < 0.01 && p('utilization', 'log') > 0.5 && p('utilization', 'asin_sqrt') < 0.01 && p('utilization', 'logit') < 0.01);
 });
 
-// The oven example's description says that the choice of output decides the comparison: paired
-// across the shared demand streams, the time in system cannot tell the policies apart, and the
-// muffins unfinished, loaded through the dialog in its place, favor the nearly full policy.
-test('the muffin-oven example shows the outputs disagreeing, as its description says', () => {
+// The oven example's description says that the outputs do not all agree: paired across the shared
+// demand streams, the time in system and the muffins unfinished, loaded through the dialog in its
+// place, both favor the greedy policy, and the utilization and the most muffins waiting do not
+// separate the two.
+test('the muffin-oven example favors greedy loading on two outputs of four, as its description says', () => {
   const ex = EXAMPLES.find(e => e.id === 'muffin-oven');
   const sn = sniff(ex.text, { name: ex.mapping.name });
   const paired = value => {
@@ -84,8 +85,9 @@ test('the muffin-oven example shows the outputs disagreeing, as its description 
   };
   assert.deepEqual(sn.header, ['policy', 'block', 'avg_time_in_system', 'utilization', 'max_waiting', 'unfinished']);
   const tis = paired(2), left = paired(5);
-  assert.ok(tis.p > 0.2, 'time in system p ' + tis.p);
-  assert.ok(left.p < 0.05 && left.meanD < 0, 'unfinished p ' + left.p + ', mean difference ' + left.meanD);
+  assert.ok(tis.p < 0.001 && tis.meanD > 0, 'time in system p ' + tis.p + ', mean difference ' + tis.meanD);
+  assert.ok(left.p < 0.05 && left.meanD > 0, 'unfinished p ' + left.p + ', mean difference ' + left.meanD);
+  for (const value of [3, 4]) assert.ok(paired(value).p > 0.2, 'column ' + value + ' p ' + paired(value).p);
 });
 
 // The customers-served example exists to show a pooled one-way analysis of variance with no

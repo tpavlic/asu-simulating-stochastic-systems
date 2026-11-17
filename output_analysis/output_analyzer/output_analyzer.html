@@ -962,29 +962,29 @@ B,15,2.8592
     file: "muffin_oven.csv",
     kind: "reps",
     format: "columns",
-    description: "An oven that holds 30 muffins and bakes them for 4 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, which the file's block column names, and each run reports the average time in system of the muffins that finished, the oven's utilization, the most muffins ever waiting, and the muffins unfinished at the end. Two Systems opens the two policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system cannot tell the two policies apart, but the muffins unfinished favor the nearly full policy.",
+    description: "An oven that holds 30 muffins and bakes them for 3 minutes takes a call for 2 to 12 muffins each minute for 30 minutes, and it is loaded, oldest muffins first, whenever it is empty and enough muffins wait: one for the greedy policy, 20 for the nearly full one. Each of 10 replications runs both policies against the same random demand stream, which the file's block column names, and each run reports the average time in system of the muffins that finished, the oven's utilization, the most muffins ever waiting, and the muffins unfinished at the end. Two Systems opens the two policies as paired differences; the Assign its columns myself button opens the dialog in which the other outputs can be loaded in place of the time in system. The time in system and the muffins unfinished both favor the greedy policy, but the utilization and the most muffins waiting cannot tell the two policies apart.",
     mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Muffin oven","endTime":null,"blocks":true},
     text: `policy,block,avg_time_in_system,utilization,max_waiting,unfinished
-greedy,1,6.6034,0.8622,33,43
-greedy,2,5.4432,0.84,26,48
-greedy,3,5.4,0.7156,24,36
-greedy,4,5.6453,0.8311,36,50
-greedy,5,5.4774,0.7511,24,35
-greedy,6,5.6667,0.7733,26,39
-greedy,7,6.0663,0.8044,37,60
-greedy,8,5.4767,0.8244,28,43
-greedy,9,5.537,0.7867,29,47
-greedy,10,6.116,0.8711,33,49
-nearly_full,1,5.6517,0.8933,31,21
-nearly_full,2,5.6684,0.8578,30,31
-nearly_full,3,5.6,0.7156,22,36
-nearly_full,4,5.7849,0.8311,36,50
-nearly_full,5,5.2619,0.7467,21,22
-nearly_full,6,5.6467,0.7667,24,48
-nearly_full,7,5.7097,0.8267,33,40
-nearly_full,8,5.6395,0.8244,28,43
-nearly_full,9,5.6457,0.7778,31,34
-nearly_full,10,6.1282,0.8667,35,35
+greedy,0,3.9278,0.6467,19,18
+greedy,1,3.9665,0.5967,20,23
+greedy,2,3.9211,0.6333,19,23
+greedy,3,3.9596,0.7433,18,28
+greedy,4,4.0521,0.64,21,21
+greedy,5,3.945,0.6667,18,23
+greedy,6,3.922,0.6833,23,15
+greedy,7,3.8762,0.6733,17,15
+greedy,8,4.1126,0.74,27,17
+greedy,9,3.8962,0.61,18,22
+nearly_full,0,4.1546,0.6467,22,18
+nearly_full,1,4.257,0.5967,20,23
+nearly_full,2,4.1784,0.64,19,28
+nearly_full,3,4.1505,0.7467,23,45
+nearly_full,4,4.1629,0.6489,21,35
+nearly_full,5,4.0538,0.6733,18,37
+nearly_full,6,4.0927,0.6833,19,15
+nearly_full,7,4.0269,0.6511,19,31
+nearly_full,8,4.1351,0.74,27,17
+nearly_full,9,4.1386,0.5867,19,39
 `
   },
   {
