@@ -39610,12 +39610,17 @@ function drawPairs(d) {
   const span = tfNone ? pairsSpan(d.ds, d.np, true) : null;
   const shared = !!(span && d.ds.loadId && state.datasets.filter(x => x.loadId === d.ds.loadId && hasPairs(x)).length > 1);
   pairsFig.render(f => {
-    // The strip takes about 44 px at the right, whatever the number of columns.
-    const stripCols = ti ? 44 * (cols + 0.5) / Math.max(60, f.iw - 44) : 0;
+    // The strip takes about 50 px at the right, a 10 px gap and the strip
+    // itself, whatever the number of columns.
+    const stripCols = ti ? 50 * (cols + 0.5) / Math.max(70, f.iw - 50) : 0;
+    const gapCols = stripCols / 5, s0 = cols + 0.5 + gapCols, sw = stripCols - gapCols;
     const right = cols + 0.5 + stripCols;
     const sx = f.x([0.5, right]);
     const sy = f.y(extent(a, b, span, ti ? [ti.lo, ti.hi] : null, mu0 != null ? [mu0] : null), { pad: 0.06, nice: true });
     f.axes({ x: false, xLabel: order ? 'Replication' : 'Pair', yLabel: outcomeAxis(d.ds, false, 'none') });
+    // The plot's background and gridlines end at the last column: the strip is
+    // a summary of the data, not more data, and so it sits on the card.
+    if (ti) svgEl('rect', { x: sx(cols + 0.5), y: -1, width: f.iw - sx(cols + 0.5) + 1, height: f.ih + 2, fill: tok('--card') }, f.layers.grid);
     // The x ticks stop at the last column, so that none falls in the strip.
     const cMuted = tok('--muted');
     const at = sx.ticks(Math.max(2, Math.round(f.iw / 95))).filter(v => Number.isInteger(v) && v >= 1 && v <= cols);
@@ -39623,7 +39628,7 @@ function drawPairs(d) {
       svgEl('line', { x1: sx(v), x2: sx(v), y1: f.ih, y2: f.ih + 4, stroke: cMuted, 'stroke-width': 1 }, f.layers.axes);
       svgEl('text', { x: sx(v), y: f.ih + 16, 'text-anchor': 'middle', 'font-size': 11, fill: cMuted, class: 'tick' }, f.layers.axes).textContent = String(v);
     }
-    svgEl('line', { x1: 0, x2: f.iw, y1: f.ih, y2: f.ih, stroke: cMuted, 'stroke-width': 1 }, f.layers.axes);
+    svgEl('line', { x1: 0, x2: sx(cols + 0.5), y1: f.ih, y2: f.ih, stroke: cMuted, 'stroke-width': 1 }, f.layers.axes);
     svgEl('text', { x: sx((cols + 1) / 2), y: f.ih + Math.max(32, f.m.b - 8), 'text-anchor': 'middle', 'font-size': 12, fill: tok('--text'), 'font-weight': 500 }, f.layers.axes)
       .textContent = order ? 'Replication' : 'Pair';
     f.cats = { axis: 'x', at, labels: at.map(String) };
@@ -39657,10 +39662,9 @@ function drawPairs(d) {
       svgEl('circle', { cx: sx(xb[k]), cy: sy(b[k]), r, fill: cCard, stroke: cEst, 'stroke-width': 2 }, gB);
       svgEl('circle', { cx: sx(xa[k]), cy: sy(a[k]), r, fill: cEst, stroke: cCard, 'stroke-width': 1 }, gA);
     }
-    // The strip: a separator, a tick for each pair average, and the interval.
-    const rugX0 = cols + 0.5 + stripCols * 0.22, rugX1 = cols + 0.5 + stripCols * 0.5, ciX = cols + 0.5 + stripCols * 0.76;
+    // The strip: a tick for each pair average, and the interval.
+    const rugX0 = s0 + sw * 0.12, rugX1 = s0 + sw * 0.42, ciX = s0 + sw * 0.72;
     if (ti) {
-      svgEl('line', { x1: sx(cols + 0.5 + stripCols * 0.08), x2: sx(cols + 0.5 + stripCols * 0.08), y1: 0, y2: f.ih, stroke: tok('--border'), 'stroke-width': 1 }, f.inner);
       const gRug = svgEl('g', { class: 'm-pair-rug' }, f.inner);
       for (const v of avg) svgEl('line', { x1: sx(rugX0), x2: sx(rugX1), y1: sy(v), y2: sy(v), stroke: cTruth, 'stroke-width': 1.2, opacity: 0.8 }, gRug);
       const c = flagged ? tok('--miss') : cTruth;
@@ -39674,7 +39678,7 @@ function drawPairs(d) {
     if (ti) {
       const c = flagged ? tok('--miss') : cTruth;
       f.series.push({ kind: 'segments', x0: avg.map(() => rugX0), x1: avg.map(() => rugX1), y0: avg.slice(), y1: avg.slice(), color: cTruth, width: 1.2, label: 'pair average (rug)' },
-        { kind: 'segments', x0: [ciX, ciX - stripCols * 0.12, ciX - stripCols * 0.12], x1: [ciX, ciX + stripCols * 0.12, ciX + stripCols * 0.12], y0: [ti.lo, ti.lo, ti.hi], y1: [ti.hi, ti.lo, ti.hi],
+        { kind: 'segments', x0: [ciX, ciX - sw * 0.15, ciX - sw * 0.15], x1: [ciX, ciX + sw * 0.15, ciX + sw * 0.15], y0: [ti.lo, ti.lo, ti.hi], y1: [ti.hi, ti.lo, ti.hi],
           color: c, width: 2.5, dash: flagged, label: intName + (flagged ? ' (excludes mu0)' : '') },
         { kind: 'points', x: [ciX], y: [ti.mean], color: c, hollow: flagged, label: d.np ? 'pseudo-median of the pair averages' : 'mean of the pair averages' });
     }

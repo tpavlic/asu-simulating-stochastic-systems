@@ -98,8 +98,10 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   second hollow, joined, with the pair averages as a heavy line and μ₀ dashed when the test is on
   and no transform is, or under a "Show the replications" switch (`pairsView`, a page setting)
   each replication in run order in its own column, all joined in sequence by a light line and
-  each pair average drawn between its two; with no transform, a strip at the right edge holds a
-  tick for each pair average and the page's interval (red and dashed when it excludes μ₀), and
+  each pair average drawn between its two; with no transform, a strip at the right edge, set on
+  the card past the end of the plot's background and gridlines because it summarizes the data
+  rather than adding to them (the CI Explorer's convention), holds a tick for each pair average
+  and the page's interval (red and dashed when it excludes μ₀), and
   the datasets loaded as pair averages from one file (one `loadId`) share one scale, here and on
   the outcomes figure above, spanning every such set's points and interval at the page's level
   and procedure (`pairsSpan`), so that switching between them keeps every mark in place, while a
