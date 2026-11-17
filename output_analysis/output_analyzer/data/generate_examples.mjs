@@ -6,10 +6,13 @@
 //   W[n+1] = max(0, W[n] + S[n] - A[n+1]),
 // where S[n] is customer n's service time and A[n+1] is the interarrival time before customer
 // n+1. The number in queue (customers waiting, not the one in service) is simulated event by
-// event and recorded at every change. Two examples give the queue room for only a few customers
-// in all, turn away an arrival who finds it full, and count the customers served in a day; one
-// of them also draws some designs' service times from an Erlang distribution with k phases (the
-// sum of k exponential draws of mean 1/(k mu)), whose standard deviation is 1/sqrt(k) of its mean.
+// event and recorded at every change. Two examples compare the single server with two servers
+// sharing one first-in first-out queue (M/M/2), each working at half its speed, and so with the
+// same capacity: each customer, in arrival order, takes whichever server frees up first. Two
+// examples give the queue room for only a few customers in all, turn away an arrival who finds
+// it full, and count the customers served in a day; one of them also draws some designs' service
+// times from an Erlang distribution with k phases (the sum of k exponential draws of mean
+// 1/(k mu)), whose standard deviation is 1/sqrt(k) of its mean.
 //
 // One example is not simulated here: it holds the runs of a batch oven, in which a call for 2 to
 // 12 muffins (uniform) arrives each minute from minute 0 to minute 30, and the oven, which holds
@@ -30,6 +33,12 @@
 //   two_designs_independent.csv  designs A (0.8) and B (0.75), 15 days each, independent streams
 //   two_designs_crn.csv        the same designs with the same streams reused for both, the day
 //                              in a column headed block, which marks the ids as blocks
+//   servers_independent.csv    one server of mean service 1.0 (M/M/1) and two of mean 2.0 each
+//                              (M/M/2), mean interarrival 1.25 (rho = 0.8 in both), 15 days of 480
+//                              minutes each, independent streams
+//   servers_crn.csv            the same two queues with the same streams reused for both, the day
+//                              in a column headed block; a customer's service draw is the same
+//                              uniform in both, and so takes the two-server queue twice as long
 //   four_designs.csv           designs A..D (0.80, 0.78, 0.75, 0.70), 10 days each, independent
 //   six_designs.csv            designs A..F of a queue with room for 8 customers in all, 20 days of 480
 //                              minutes each, independent: the customers served each day. A, C, and E
@@ -75,6 +84,8 @@ const SEEDS = {
   indepA: 31000,
   indepB: 47000,
   crn: 59000,
+  serversIndep: [222000, 228000],
+  serversCrn: 360000,
   four: [61000, 67000, 73000, 79000],
   six: [420000, 426000, 432000, 438000, 444000, 450000],
   served: [480000, 486000, 492000, 498000, 504000],
@@ -135,6 +146,31 @@ function day(st, meanSrv) {
   let max = 0;
   for (const w of waits) { sum += w; if (w > max) max = w; }
   return { avg: sum / waits.length, max, n: waits.length };
+}
+
+/**
+ * One terminating day of a queue with `servers` identical servers sharing one first-in first-out
+ * line, started empty: each customer who arrives before `until` takes, in arrival order, whichever
+ * server frees up first, and waits until then. Every such customer is served, as in `day`.
+ * Returns the average wait in queue.
+ */
+function serversDay(st, meanArr, meanSrv, servers, until = 480) {
+  const free = new Array(servers).fill(0);
+  let clock = 0;
+  let sum = 0;
+  let n = 0;
+  for (;;) {
+    clock += expo(st.arr(), meanArr);
+    if (clock >= until) break;
+    const s = expo(st.srv(), meanSrv);
+    let k = 0;
+    for (let i = 1; i < servers; i++) if (free[i] < free[k]) k = i;
+    const begin = Math.max(clock, free[k]);
+    free[k] = begin + s;
+    sum += begin - clock;
+    n++;
+  }
+  return sum / n;
 }
 
 /** Event-driven M/M/1; returns [time, number in queue] at every change, ending at `endTime`. */
@@ -236,6 +272,15 @@ function designsCsv(designs, reps, idName = 'replication') {
     for (let r = 1; r <= reps; r++) {
       lines.push(`${name},${r},${fmt(day(streams(base, r), mean).avg)}`);
     }
+  }
+  return lines.join('\n') + '\n';
+}
+
+/** Each day's average wait in a queue with `servers` servers of mean service `mean`, per design. */
+function serversCsv(designs, reps, idName = 'replication') {
+  const lines = ['design,' + idName + ',avg_wait'];
+  for (const { name, mean, servers, base } of designs) {
+    for (let r = 1; r <= reps; r++) lines.push(`${name},${r},${fmt(serversDay(streams(base, r), 1.25, mean, servers))}`);
   }
   return lines.join('\n') + '\n';
 }
@@ -357,6 +402,20 @@ function entries() {
       description: 'The same two queues and 15 days each as the independent-replications example, but both designs see the same arrival and service random numbers on each day, and so the file\'s block column names the day. Two Systems opens the pair as a paired difference; switch it to Independent to see how much wider the interval becomes without the pairing.',
       text: designsCsv([A('A', 0.8, SEEDS.crn), A('B', 0.75, SEEDS.crn)], 15, 'block'),
       mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, blocks: true, name: 'Two designs, paired' }
+    },
+    {
+      id: 'servers-independent', title: 'Independent replications (average wait, 1 vs 2 servers)', file: 'servers_independent.csv',
+      kind: 'reps', format: 'columns',
+      description: 'Average wait in queue over an 8-hour day for two queues with the same capacity: one server with a mean service time of 1 minute (M/M/1), and two servers sharing one line, each with a mean of 2 minutes (M/M/2). Customers arrive at a mean of one every 1.25 minutes, and so both run at utilization 0.8. Each design has 15 days drawn from independent random streams. The single server keeps customers waiting in queue a little longer on average, but the waits vary far more from day to day than that, and so the two-sample interval includes 0.',
+      text: serversCsv([{ name: 'M/M/1', mean: 1.0, servers: 1, base: SEEDS.serversIndep[0] }, { name: 'M/M/2', mean: 2.0, servers: 2, base: SEEDS.serversIndep[1] }], 15),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: '1 vs 2 servers, independent' }
+    },
+    {
+      id: 'servers-crn', title: 'Common random numbers (average wait, 1 vs 2 servers)', file: 'servers_crn.csv',
+      kind: 'reps', format: 'columns',
+      description: 'The same two queues and 15 days each as the independent 1-vs-2-servers example, but on each day both designs see the same arrivals and the same service random numbers (each draw takes one of the two half-speed servers twice as long), and so the file\'s block column names the day. Two Systems opens the pair as a paired difference, which excludes 0: the single server\'s average wait is the longer on every one of the 15 days. Switch it to Independent to see the interval widen to include 0.',
+      text: serversCsv([{ name: 'M/M/1', mean: 1.0, servers: 1, base: SEEDS.serversCrn }, { name: 'M/M/2', mean: 2.0, servers: 2, base: SEEDS.serversCrn }], 15, 'block'),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, blocks: true, name: '1 vs 2 servers, paired' }
     },
     {
       id: 'muffin-oven', title: 'Paired comparison, four outputs (muffin oven, 2 policies)', file: 'muffin_oven.csv',

@@ -213,7 +213,7 @@ export function render(root) {
   // label rather than dropped.
   const groups = [
     { label: 'One System', ids: ['queue-reps'] },
-    { label: 'Two Systems', ids: ['two-independent', 'two-crn', 'muffin-oven'] },
+    { label: 'Two Systems', ids: ['two-independent', 'two-crn', 'servers-independent', 'servers-crn', 'muffin-oven'] },
     { label: 'Several Systems', ids: ['customers-served', 'versus-control', 'four-designs', 'four-crn', 'six-designs', 'service-level'] },
     { label: 'Steady State and within-run data', ids: ['transient', 'steady-long', 'queue-length', 'utilization'] }
   ];

@@ -14,7 +14,7 @@ const { EXAMPLES } = await import(pathToFileURL(path.join(ROOT, 'js', 'data', 'e
 const { sniff, buildDatasets } = await import(pathToFileURL(path.join(ROOT, 'js', 'io', 'parse.js')).href);
 const { repEstimates } = await import(pathToFileURL(path.join(ROOT, 'js', 'data', 'model.js')).href);
 const { levene } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
-const { pairedT } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
+const { pairedT, welch } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
 const { applyTransform } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'transform.js')).href);
 const { pairingDefault } = await import(pathToFileURL(path.join(ROOT, 'js', 'ui', 'rules.js')).href);
 const { posthoc, bonferroniFamily } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
@@ -36,7 +36,7 @@ test('regenerated files match the committed ones byte for byte', () => {
   try {
     execFileSync('node', [GEN, '--out', tmp]);
     const files = fs.readdirSync(path.join(tmp, 'data'));
-    assert.equal(files.length, 14);
+    assert.equal(files.length, 16);
     for (const f of files) {
       assert.ok(fs.readFileSync(path.join(tmp, 'data', f)).equals(fs.readFileSync(path.join(ROOT, 'data', f))), f);
     }
@@ -48,7 +48,7 @@ test('regenerated files match the committed ones byte for byte', () => {
 });
 
 test('each entry carries its data file text and a mapping with a kind', () => {
-  assert.equal(EXAMPLES.length, 14);
+  assert.equal(EXAMPLES.length, 16);
   for (const e of EXAMPLES) {
     assert.equal(e.text, fs.readFileSync(path.join(ROOT, 'data', e.file), 'utf8'), e.file);
     assert.ok(['tally', 'time', 'reps'].includes(e.mapping.kind), e.id);
@@ -88,6 +88,21 @@ test('the muffin-oven example favors greedy loading on two outputs of four, as i
   assert.ok(tis.p < 0.001 && tis.meanD > 0, 'time in system p ' + tis.p + ', mean difference ' + tis.meanD);
   assert.ok(left.p < 0.05 && left.meanD > 0, 'unfinished p ' + left.p + ', mean difference ' + left.meanD);
   for (const value of [3, 4]) assert.ok(paired(value).p > 0.2, 'column ' + value + ' p ' + paired(value).p);
+});
+
+// The 1-vs-2-servers examples' descriptions say that 15 independent days cannot tell the two
+// queues apart, whereas 15 days on common random numbers can, with the single server's wait the
+// longer on every day, and that the paired file read as independent widens to include 0.
+test('the 1-vs-2-servers examples need the pairing to tell the queues apart, as their descriptions say', () => {
+  const [ia, ib] = groupsOf('servers-independent');
+  const [ca, cb] = groupsOf('servers-crn');
+  assert.equal(ia.length, 15);
+  assert.equal(ca.length, 15);
+  const indep = welch(ia, ib, 0.95), unpaired = welch(ca, cb, 0.95), paired = pairedT(ca, cb, 0.95);
+  assert.ok(indep.lo < 0 && indep.hi > 0, 'independent interval [' + indep.lo + ', ' + indep.hi + ']');
+  assert.ok(unpaired.lo < 0 && unpaired.hi > 0, 'paired file read as independent [' + unpaired.lo + ', ' + unpaired.hi + ']');
+  assert.ok(paired.lo > 0, 'paired interval [' + paired.lo + ', ' + paired.hi + ']');
+  assert.ok(Array.from(paired.diffs).every(d => d > 0), 'differences ' + Array.from(paired.diffs));
 });
 
 // The customers-served example exists to show a pooled one-way analysis of variance with no
@@ -185,7 +200,7 @@ test('the six-designs example has unequal spreads that the screen takes in strid
 // they open paired both when loaded with their own mapping and when the file is read with the
 // mapping the importer suggests (the Assign its columns myself path); the others do not.
 test('the common-random-numbers examples mark their ids as blocks, and only they do', () => {
-  const BLOCKED = ['two-crn', 'muffin-oven', 'four-crn'];
+  const BLOCKED = ['two-crn', 'servers-crn', 'muffin-oven', 'four-crn'];
   for (const ex of EXAMPLES) {
     const sn = sniff(ex.text, { name: ex.mapping.name });
     const blocked = BLOCKED.includes(ex.id);

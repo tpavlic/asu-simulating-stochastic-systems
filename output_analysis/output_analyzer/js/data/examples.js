@@ -120,6 +120,88 @@ B,15,2.8592
 `
   },
   {
+    id: "servers-independent",
+    title: "Independent replications (average wait, 1 vs 2 servers)",
+    file: "servers_independent.csv",
+    kind: "reps",
+    format: "columns",
+    description: "Average wait in queue over an 8-hour day for two queues with the same capacity: one server with a mean service time of 1 minute (M/M/1), and two servers sharing one line, each with a mean of 2 minutes (M/M/2). Customers arrive at a mean of one every 1.25 minutes, and so both run at utilization 0.8. Each design has 15 days drawn from independent random streams. The single server keeps customers waiting in queue a little longer on average, but the waits vary far more from day to day than that, and so the two-sample interval includes 0.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"1 vs 2 servers, independent","endTime":null,"blocks":false},
+    text: `design,replication,avg_wait
+M/M/1,1,5.1515
+M/M/1,2,4.3616
+M/M/1,3,7.081
+M/M/1,4,3.4401
+M/M/1,5,2.5859
+M/M/1,6,6.0676
+M/M/1,7,1.4993
+M/M/1,8,4.4296
+M/M/1,9,3.8876
+M/M/1,10,2.7101
+M/M/1,11,1.9113
+M/M/1,12,3.8814
+M/M/1,13,3.0573
+M/M/1,14,2.0386
+M/M/1,15,2.0135
+M/M/2,1,3.0113
+M/M/2,2,2.1099
+M/M/2,3,2.268
+M/M/2,4,4.1599
+M/M/2,5,3.4221
+M/M/2,6,2.9008
+M/M/2,7,1.3408
+M/M/2,8,2.3524
+M/M/2,9,3.9108
+M/M/2,10,2.021
+M/M/2,11,3.4591
+M/M/2,12,4.8506
+M/M/2,13,2.2564
+M/M/2,14,4.6567
+M/M/2,15,5.4774
+`
+  },
+  {
+    id: "servers-crn",
+    title: "Common random numbers (average wait, 1 vs 2 servers)",
+    file: "servers_crn.csv",
+    kind: "reps",
+    format: "columns",
+    description: "The same two queues and 15 days each as the independent 1-vs-2-servers example, but on each day both designs see the same arrivals and the same service random numbers (each draw takes one of the two half-speed servers twice as long), and so the file's block column names the day. Two Systems opens the pair as a paired difference, which excludes 0: the single server's average wait is the longer on every one of the 15 days. Switch it to Independent to see the interval widen to include 0.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"1 vs 2 servers, paired","endTime":null,"blocks":true},
+    text: `design,block,avg_wait
+M/M/1,1,2.1635
+M/M/1,2,2.9203
+M/M/1,3,4.9971
+M/M/1,4,8.4047
+M/M/1,5,3.3015
+M/M/1,6,3.7631
+M/M/1,7,1.364
+M/M/1,8,8.5677
+M/M/1,9,1.8234
+M/M/1,10,3.7395
+M/M/1,11,2.9593
+M/M/1,12,2.0353
+M/M/1,13,3.0015
+M/M/1,14,6.0571
+M/M/1,15,4.5616
+M/M/2,1,1.8415
+M/M/2,2,2.4365
+M/M/2,3,4.4785
+M/M/2,4,8.1092
+M/M/2,5,2.8219
+M/M/2,6,3.5356
+M/M/2,7,1.0213
+M/M/2,8,8.0916
+M/M/2,9,1.4472
+M/M/2,10,3.3318
+M/M/2,11,2.4722
+M/M/2,12,1.6734
+M/M/2,13,2.6457
+M/M/2,14,5.6552
+M/M/2,15,4.0377
+`
+  },
+  {
     id: "muffin-oven",
     title: "Paired comparison, four outputs (muffin oven, 2 policies)",
     file: "muffin_oven.csv",
