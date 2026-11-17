@@ -43367,12 +43367,12 @@ function strips(fig, rows, o = {}) {
   const sx = fig.x(extent(all), { pad: 0.06, nice: true });
   fig.axes({ y: false });
   const rowH = fig.ih / n;
-  const cEst = tok('--est'), cTruth = tok('--truth'), cCard = tok('--card'), cText = tok('--text'), cMuted = tok('--muted'), cBorder = tok('--border'), cMiss = tok('--miss');
+  const cEst = tok('--est'), cTruth = tok('--truth'), cCard = tok('--card'), cText = tok('--text'), cBorder = tok('--border'), cMiss = tok('--miss');
   const ry = recordRows(fig, rows.map(r => r.label));
   if (o.ref !== undefined && o.ref !== null) {
     const x = sx(o.ref);
-    svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: cMuted, 'stroke-width': 1.5, 'stroke-dasharray': '5,4' }, fig.inner);
-    fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: cMuted, label: 'reference' });
+    svgEl('line', { x1: x, x2: x, y1: 0, y2: fig.ih, stroke: cTruth, 'stroke-width': 1.5, 'stroke-dasharray': '5,4', class: 'm-ref' }, fig.inner);
+    fig.series.push({ kind: 'vline', x: o.ref, dash: true, color: cTruth, label: 'reference' });
   }
   const rad = fig.narrow ? 4 : 4.5;
   const placed = [];
@@ -44369,7 +44369,7 @@ function renderPaired(res, notes, d, level, blank) {
     excludes
       ? { swatch: 'flagged', color: '--miss', label: (np ? 'pseudo-median of the differences with its ' : 'mean difference with its ') + shown.name + ', which excludes 0' }
       : { swatch: 'interval', color: '--truth', label: (np ? 'pseudo-median of the differences with its ' : 'mean difference with its ') + (shown ? shown.name : L + (np ? ' Wilcoxon signed-rank interval' : ' paired t interval')) },
-    { swatch: 'dash', color: '--muted', label: 'zero difference' }
+    { swatch: 'dash', color: '--truth', label: 'zero difference' }
   ], fig1);
 
   if (!pr) {
