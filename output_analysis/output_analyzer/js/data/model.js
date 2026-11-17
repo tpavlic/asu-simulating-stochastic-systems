@@ -20,8 +20,9 @@
  * the same id in two datasets of that load is one block (the same subject,
  * batch, day, or random-number stream), and so a comparison of datasets from
  * the load is paired by default. Datasets from different loads never are.
- * `source.pairs` says that the file's replications were loaded as antithetic
- * pair averages (see pairAverages). */
+ * `source.pairs`, when set, says that the file's replications were loaded as
+ * antithetic pair averages, and holds each pair's two outcomes (see
+ * pairAverages). */
 
 /** How each dataset kind is named in page text and in a data file's # lines. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
@@ -97,6 +98,17 @@ function toF64(a) {
   return a instanceof Float64Array ? a : Float64Array.from(a);
 }
 
+// A dataset's antithetic pairs as `source.pairs` keeps them: each pair's two
+// outcomes as plain arrays of one length. True, from a session stored before
+// the outcomes were kept or holding pairs that cannot be drawn, still marks
+// the dataset as pair averages; anything that is not an object marks nothing.
+function pairsField(p) {
+  if (p === true) return true;
+  if (!p || typeof p !== 'object') return null;
+  const ok = v => Array.isArray(v) && v.every(x => typeof x === 'number' && Number.isFinite(x));
+  return ok(p.first) && ok(p.second) && p.first.length === p.second.length ? { first: p.first.slice(), second: p.second.slice() } : true;
+}
+
 /**
  * Build a dataset from partial fields, filling defaults, converting each
  * replication's vectors to Float64Array, and assigning an id (the given one,
@@ -106,6 +118,7 @@ function toF64(a) {
  */
 export function makeDataset(fields = {}) {
   const src = fields.source || {};
+  const pairs = pairsField(src.pairs);
   return {
     id: fields.id != null ? fields.id : newId(),
     name: fields.name != null ? fields.name : 'data',
@@ -122,7 +135,7 @@ export function makeDataset(fields = {}) {
       file: src.file != null ? src.file : '',
       format: src.format != null ? src.format : '',
       notes: (src.notes || []).slice()
-    }, src.pairs === true ? { pairs: true } : {}),
+    }, pairs ? { pairs } : {}),
     issues: (fields.issues || []).slice(),
     derivedFrom: fields.derivedFrom || null,
     loadId: fields.loadId != null ? fields.loadId : null,
@@ -441,8 +454,9 @@ export function canInfer(ds) {
  * observation is ever paired with another, and none is carried over. The
  * dataset takes its source's name with " (pair averages)", keeps its load and
  * blocks, and its source carries
- * `pairs: true` and a note with the two figures below, since the replications
- * it was made from are not loaded. Alongside it come the correlation r
+ * `pairs: { first, second }`, the outcomes of each pair's two replications in
+ * pair order, for One System's figure of the pairs, and a note with the two
+ * figures below, since the replications it was made from are not loaded. Alongside it come the correlation r
  * between the first and second
  * members across the pairs, and the variance ratio: the sample variance of
  * the averages over (s₁² + s₂²)/4, what averages of two independent
@@ -481,15 +495,7 @@ export function pairAverages(ds) {
     reps.push({ id: String(ids[i]) + '-' + String(ids[i + 1]), t: null, v: [(est[i] + est[i + 1]) / 2] });
   }
   const n = a.length;
-  const ma = mean(a), mb = mean(b);
-  let saa = 0, sbb = 0, sab = 0;
-  for (let k = 0; k < n; k++) { saa += (a[k] - ma) ** 2; sbb += (b[k] - mb) ** 2; sab += (a[k] - ma) * (b[k] - mb); }
-  const avg = reps.map(r => r.v[0]), mAvg = mean(avg);
-  let sAvg = 0;
-  for (const v of avg) sAvg += (v - mAvg) ** 2;
-  const varA = saa / (n - 1), varB = sbb / (n - 1), varAvg = sAvg / (n - 1);
-  const r = saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN;
-  const ratio = varA + varB > 0 ? varAvg / ((varA + varB) / 4) : NaN;
+  const { r, ratio } = pairStats(a, b);
   const dataset = makeDataset({
     name: ds.name + ' (pair averages)',
     response: ds.response,
@@ -497,7 +503,7 @@ export function pairAverages(ds) {
     kind: 'reps',
     reps,
     endTime: null,
-    source: { file: ds.source.file, format: ds.source.format, pairs: true, notes: ds.source.notes.concat(['Replications ' + String(ids[0]) + ' to ' + String(ids[R - 1]) + ' of ' + ds.name +
+    source: { file: ds.source.file, format: ds.source.format, pairs: { first: a, second: b }, notes: ds.source.notes.concat(['Replications ' + String(ids[0]) + ' to ' + String(ids[R - 1]) + ' of ' + ds.name +
       ' were run in antithetic pairs and loaded as ' + n + ' pair averages (1 and 2, 3 and 4, …): correlation within the pairs r = ' + sig3(r) +
       ', variance ratio ' + sig3(ratio) + ', the sample variance of the averages over what averages of two independent replications would have.']) },
     issues: ds.issues,
@@ -505,6 +511,29 @@ export function pairAverages(ds) {
     blocks: ds.blocks
   });
   return { ok: true, dataset, stats: { pairs: n, r, ratio } };
+}
+
+/**
+ * The correlation r between the first and second members of a set of pairs;
+ * the sample variance of the pair averages, `varPaired`, which equals
+ * (s₁² + s₂² + 2r s₁s₂)/4 exactly; (s₁² + s₂²)/4, the
+ * variance averages of two independent replications with the members'
+ * variances would have, `varIndependent`; and their ratio. r is NaN where a
+ * member does not vary, and the ratio where neither does.
+ * @param {ArrayLike<number>} a the pairs' first members
+ * @param {ArrayLike<number>} b their second members, in the same order
+ * @returns {{ r: number, ratio: number, varPaired: number, varIndependent: number }}
+ */
+export function pairStats(a, b) {
+  const n = a.length;
+  const ma = mean(a), mb = mean(b);
+  let saa = 0, sbb = 0, sab = 0, sAvg = 0;
+  for (let k = 0; k < n; k++) { saa += (a[k] - ma) ** 2; sbb += (b[k] - mb) ** 2; sab += (a[k] - ma) * (b[k] - mb); }
+  const mAvg = (ma + mb) / 2;
+  for (let k = 0; k < n; k++) sAvg += ((a[k] + b[k]) / 2 - mAvg) ** 2;
+  const r = saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN;
+  const ratio = saa + sbb > 0 ? sAvg / ((saa + sbb) / 4) : NaN;
+  return { r, ratio, varPaired: sAvg / (n - 1), varIndependent: (saa + sbb) / 4 / (n - 1) };
 }
 
 // Three significant digits, for a note; a dash where there is no number.

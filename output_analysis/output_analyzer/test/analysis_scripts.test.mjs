@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { analysisScript as writeScript, parseReport, scriptFileName, ascii, sectionLine, ANALYSIS_WRITERS, tolFor } from '../js/io/analysis_scripts.js';
 import { baseRecipe, outcomeVector, oneRecipe, oneTooBig, twoRecipe } from '../js/io/recipes.js';
-import { makeDataset } from '../js/data/model.js';
+import { makeDataset, pairAverages } from '../js/data/model.js';
 import { sturgesBins } from '../js/stats/descriptive.js';
 import { sniff, buildDatasets } from '../js/io/parse.js';
 import { EXAMPLES } from '../js/data/examples.js';
@@ -2851,12 +2851,16 @@ test('Levene groups too large to embed are left out of a script that reads its f
   const flatReps = makeDataset({ name: 'Flat', response: 'w', kind: 'reps', reps: [1, 2, 3, 4, 5, 6].map(i => ({ id: i, v: [0.1] })) });
   const shortRun = makeDataset({ name: 'Short', response: 'w', kind: 'tally', reps: [{ id: 1, v: [3, 1, 4, 1, 5] }, { id: 2, v: [9, 2, 6] }] });
   const flatRun = makeDataset({ name: 'Flat run', response: 'v', kind: 'tally', reps: [{ id: 1, v: Array(200).fill(0.1) }] });
+  // The antithetic example loaded as its pair averages, whose pairs the page draws as a second figure.
+  const antithetic = pairAverages(example('antithetic-pairs')[0]).dataset;
   // [label, recipe, figures drawn, smoke]
   const views = [
     ['One System, t', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null }), 1, true],
     ['One System, pooled', oneRecipe({ ds: TRANSIENT, x: TRANSIENT.reps.flatMap(p => Array.from(p.v)), ids: null, pooled: true, proc: 't', level: 0.95, plan: null }), 1],
     ['One System, t with the stated mean on the plot', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 3, qp: 0.5, view: { mu0: true } }), 1],
     ['One System, t with a stated mean the interval excludes', oneRecipe({ ds: QUEUE, x: queueX(), ids: queueIds(), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 10, qp: 0.5, view: { mu0: true } }), 1, true],
+    ['One System, antithetic pairs with the stated mean', oneRecipe({ ds: antithetic, x: antithetic.reps.map(p => p.v[0]), ids: antithetic.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95, plan: null, mu0: 0.8, qp: 0.5, view: { mu0: true } }), 2, true],
+    ['One System, antithetic pairs in run order', oneRecipe({ ds: antithetic, x: antithetic.reps.map(p => p.v[0]), ids: antithetic.reps.map(p => p.id), pooled: false, proc: 't', level: 0.95, plan: null, view: { pairsOrder: true } }), 2, true],
     ['Two Systems, rank-sum', twoOf(IND_A, IND_B, 'np', 0.95, null), 2],
     ['Two Systems, paired, pairs by replication', pairedRecipe(CRN_A, CRN_B, 't', 'id', null, 0.95, { pairView: 'rep' }), 2, true],
     ['Two Systems, paired signed-rank, pairs as slopes', pairedRecipe(CRN_A, CRN_B, 'np', 'position', null, 0.95, { pairView: 'slope' }), 2],

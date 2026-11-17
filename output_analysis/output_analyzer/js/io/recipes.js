@@ -251,6 +251,12 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   r.fig = { xlab: outcomeAxis(ds, pooled, tf), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
   // The stated mean as a dashed line, when the page drew it.
   r.fig.mu0 = !!(view && view.mu0) && !!test;
+  // A dataset loaded as antithetic pair averages: the page's figure of the
+  // pairs, which needs each pair's two outcomes.
+  const P = !pooled && ds.source && ds.source.pairs;
+  if (P && Array.isArray(P.first) && P.first.length >= 2) {
+    r.fig.pairs = { first: P.first.slice(), second: P.second.slice(), ylab: outcomeAxis(ds, false, 'none'), order: !!(view && view.pairsOrder) };
+  }
   // A relative target is carried as the percentage, and the script works out
   // plan_h from the data's own mean, so that it follows the data if they are edited.
   r.settings = !planOut ? {}

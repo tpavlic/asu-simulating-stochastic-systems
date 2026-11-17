@@ -391,13 +391,29 @@ FIG_M.pairsByRep = `
 function fig_pairs_by_rep(a, b, ids, o)
 % Matched pairs side by side, one column per replication: design A as a
 % filled dot, design B as a hollow dot, joined by a dashed line.
-% Options: xlab and title.
+% Options: xlab, title, labels (the two legend names), avg_line (the pair
+% averages as a heavy line), ylab, ref (a dashed horizontal line), and order
+% (each replication in its own column, the pair's two side by side and all
+% of them joined in run order by a light line, with each pair average
+% between its two; ids then label the 2n columns).
 if nargin < 4, o = struct(); end
 c = fig_colors();
 a = a(:);
 b = b(:);
 n = numel(a);
-ids = fig_text_cell(ids, n);
+order = fig_opt(o, 'order', false);
+k = (1:n)';
+if order
+    xa = 2 * k - 1;
+    xb = 2 * k;
+    cols = 2 * n;
+else
+    xa = k;
+    xb = k;
+    cols = n;
+end
+xm = (xa + xb) / 2;
+ids = fig_text_cell(ids, cols);
 ttl = fig_opt(o, 'title', 'Pairs by replication');
 figure;
 fig_size(6.5, 3.5);
@@ -407,20 +423,35 @@ if n == 0
 end
 hold on;
 box on;
-x = (1:n)';
-xlim([0.5, n + 0.5]);
-ylim(fig_pad(fig_range([a; b]), 0.08));
-[px, py] = fig_segments(x, a, x, b);
-plot(px, py, 'Color', c.muted, 'LineStyle', '--');
-ha = plot(x, a, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 6);
-hb = plot(x, b, 'o', 'Color', c.est, 'MarkerFaceColor', 'w', 'MarkerSize', 6, ...
+ref = fig_opt(o, 'ref', NaN);
+xlim([0.5, cols + 0.5]);
+ylim(fig_pad(fig_range([a; b; ref(isfinite(ref))]), 0.08));
+if isfinite(ref)
+    plot([0.5, cols + 0.5], [ref, ref], 'Color', c.muted, 'LineStyle', '--');
+end
+names = fig_opt(o, 'labels', {'A', 'B'});
+names = names(:)';
+handles = [];
+if order
+    handles = plot(reshape([xa'; xb'], [], 1), reshape([a'; b'], [], 1), '-', 'Color', c.muted);
+    names = [names, {'run order'}];
+else
+    [px, py] = fig_segments(xa, a, xa, b);
+    plot(px, py, 'Color', c.muted, 'LineStyle', '--');
+end
+if fig_opt(o, 'avg_line', false)
+    handles = [handles, plot(xm, (a + b) / 2, '-', 'Color', c.truth, 'LineWidth', 3)];
+    names = [names, {'pair average'}];
+end
+ha = plot(xa, a, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 6);
+hb = plot(xb, b, 'o', 'Color', c.est, 'MarkerFaceColor', 'w', 'MarkerSize', 6, ...
           'LineWidth', 1.2);
 % Label at most about 20 columns.
-every = ceil(n / 20);
-shown = 1:every:n;
+every = ceil(cols / 20);
+shown = 1:every:cols;
 set(gca, 'XTick', shown, 'XTickLabel', ids(shown), 'TickLabelInterpreter', 'none');
-legend([ha, hb], {'A', 'B'}, 'Location', 'best', 'Interpreter', 'none');
-fig_labels(ttl, fig_opt(o, 'xlab', 'Replication id'), 'Replication outcome');
+legend([ha, hb, handles], names, 'Location', 'best', 'Interpreter', 'none');
+fig_labels(ttl, fig_opt(o, 'xlab', 'Replication id'), fig_opt(o, 'ylab', 'Replication outcome'));
 hold off;
 end
 `;

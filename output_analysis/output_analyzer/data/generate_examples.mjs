@@ -25,11 +25,18 @@
 // Each replication uses two streams, one for arrivals and one for services, seeded from a base
 // seed plus the replication index (the service stream's seed is offset further so the two never
 // coincide). Reusing the same base seed across designs reuses the same uniforms, which is how the
-// common-random-numbers set is built.
+// common-random-numbers set is built. The second run of an antithetic pair reads the first run's
+// two streams through 1 - u, and so every interarrival and service time it draws is the
+// complement of the first run's.
 //
 // Datasets (the base seeds are in SEEDS below; change them, or the parameters in the build
 // functions, to produce a different but equally valid family of files):
 //   queue_reps.csv             20 days of 480 minutes, lambda = 1, mean service 0.8 (rho = 0.8)
+//   antithetic_pairs.csv       50 days of 480 minutes, lambda = 1, mean service 0.8 (rho = 0.8): the
+//                              fraction of the day the server is busy, twice, in a column headed
+//                              pairing: as 25 antithetic pairs (replication 2j - 1 on fresh streams
+//                              and replication 2j on their complements), and as 25 pairs sharing
+//                              those first days, each partnered with a day on streams of its own
 //   two_designs_independent.csv  designs A (0.8) and B (0.75), 15 days each, independent streams
 //   two_designs_crn.csv        the same designs with the same streams reused for both, the day
 //                              in a column headed block, which marks the ids as blocks
@@ -86,6 +93,8 @@ const SEEDS = {
   crn: 59000,
   serversIndep: [222000, 228000],
   serversCrn: 360000,
+  pairsIndep: 1750000,
+  pairsAnti: 808000,
   four: [61000, 67000, 73000, 79000],
   six: [420000, 426000, 432000, 438000, 444000, 450000],
   served: [480000, 486000, 492000, 498000, 504000],
@@ -171,6 +180,11 @@ function serversDay(st, meanArr, meanSrv, servers, until = 480) {
     n++;
   }
   return sum / n;
+}
+
+/** A replication's two streams read through 1 - u: the second run of an antithetic pair. */
+function antithetic(st) {
+  return { arr: () => 1 - st.arr(), srv: () => 1 - st.srv() };
 }
 
 /** Event-driven M/M/1; returns [time, number in queue] at every change, ending at `endTime`. */
@@ -260,6 +274,41 @@ function buildQueueReps() {
   for (let r = 1; r <= 20; r++) {
     const d = day(streams(SEEDS.reps, r), 0.8);
     lines.push(`${r},${fmt(d.avg)},${fmt(d.max)},${d.n}`);
+  }
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * The fraction of a day of `until` minutes that a first-in first-out single server is busy, with
+ * arrivals until the end of the day and the service under way then cut off there.
+ */
+function busyFraction(st, meanArr, meanSrv, until = 480) {
+  let clock = 0, free = 0, busy = 0;
+  for (;;) {
+    clock += expo(st.arr(), meanArr);
+    if (clock >= until) break;
+    const begin = Math.max(clock, free);
+    free = begin + expo(st.srv(), meanSrv);
+    busy += Math.min(free, until) - Math.min(begin, until);
+  }
+  return busy / until;
+}
+
+/**
+ * Each day's utilization at rho = 0.8 for `pairs` pairs of replications, numbered 1 and 2, 3 and
+ * 4, and so on, told apart by a pairing column. Both sets run the first day of each pair on the
+ * same streams; the antithetic set runs the second on their complements, and the independent set
+ * on streams of its own, and so the second day is the only difference between the two.
+ */
+function pairsCsv(antiBase, indepBase, pairs) {
+  const lines = ['pairing,replication,utilization'];
+  for (const anti of [true, false]) {
+    for (let j = 1; j <= pairs; j++) {
+      const first = streams(antiBase, j);
+      const second = anti ? antithetic(streams(antiBase, j)) : streams(indepBase, j);
+      const name = anti ? 'antithetic' : 'independent';
+      lines.push(`${name},${2 * j - 1},${fmt(busyFraction(first, 1.0, 0.8))}`, `${name},${2 * j},${fmt(busyFraction(second, 1.0, 0.8))}`);
+    }
   }
   return lines.join('\n') + '\n';
 }
@@ -390,6 +439,13 @@ function entries() {
       mapping: { ...nullMap, kind: 'reps', value: 1, rep: 0, name: 'Queue days' }
     },
     {
+      id: 'antithetic-pairs', title: 'Antithetic variates against independent pairs (utilization, 25 pairs each)', file: 'antithetic_pairs.csv',
+      kind: 'reps', format: 'columns', pairs: true,
+      description: 'The fraction of an 8-hour day that the server of a single-server queue is busy, with exponential interarrival times (mean 1 minute) and service times (mean 0.8 minute), run twice, as two datasets. The antithetic set is 25 antithetic pairs: each odd day on fresh random numbers and the day after it on their complements, 1 − U for every interarrival and service draw, and so a busy day is paired with a quiet one. The independent set runs the same first day of each pair, partnered with a day on fresh random numbers instead of the complements, and so the partner is the only difference between the two sets. Each loads as its 25 pair averages, and One System draws the pairs under the interval: switching between the two sets moves only the hollow dots and the pair averages. In the antithetic set the correlation within the pairs is about −0.64 and the variance ratio about 0.36; in the independent set they are about 0 and 1, and its interval is the wider.',
+      text: pairsCsv(SEEDS.pairsAnti, SEEDS.pairsIndep, 25),
+      mapping: { ...nullMap, kind: 'reps', value: 2, rep: 1, scenario: 0, name: 'Utilization' }
+    },
+    {
       id: 'two-independent', title: 'Independent replications (average wait, 2 designs)', file: 'two_designs_independent.csv',
       kind: 'reps', format: 'columns',
       description: 'Average wait over an 8-hour day for a queue served at a mean of 0.8 minute (design A) and one served at 0.75 minute (design B), with 15 days each drawn from independent random streams. Nothing pairs a day of one design with a day of the other, and so the two are compared with a two-sample interval.',
@@ -509,7 +565,8 @@ function moduleText(list) {
 /**
  * Bundled example datasets. \`text\` is the file's contents as the importer reads it, and
  * \`mapping\` is the column assignment that loads it without a dialog (column indices, 0-based).
- * @type {{id: string, title: string, file: string, kind: 'tally'|'time'|'reps', format: 'minus1'|'columns', description: string, text: string, mapping: object}[]}
+ * \`pairs\` loads the replications as antithetic pair averages, as the import dialog's box does.
+ * @type {{id: string, title: string, file: string, kind: 'tally'|'time'|'reps', format: 'minus1'|'columns', pairs?: boolean, description: string, text: string, mapping: object}[]}
  */
 export const EXAMPLES = [
 ${body}

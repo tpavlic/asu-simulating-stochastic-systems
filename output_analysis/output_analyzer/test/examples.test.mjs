@@ -12,7 +12,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const GEN = path.join(ROOT, 'data', 'generate_examples.mjs');
 const { EXAMPLES } = await import(pathToFileURL(path.join(ROOT, 'js', 'data', 'examples.js')).href);
 const { sniff, buildDatasets } = await import(pathToFileURL(path.join(ROOT, 'js', 'io', 'parse.js')).href);
-const { repEstimates } = await import(pathToFileURL(path.join(ROOT, 'js', 'data', 'model.js')).href);
+const { repEstimates, pairAverages } = await import(pathToFileURL(path.join(ROOT, 'js', 'data', 'model.js')).href);
+const { tInterval } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'intervals.js')).href);
 const { levene } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
 const { pairedT, welch } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'compare.js')).href);
 const { applyTransform } = await import(pathToFileURL(path.join(ROOT, 'js', 'stats', 'transform.js')).href);
@@ -36,7 +37,7 @@ test('regenerated files match the committed ones byte for byte', () => {
   try {
     execFileSync('node', [GEN, '--out', tmp]);
     const files = fs.readdirSync(path.join(tmp, 'data'));
-    assert.equal(files.length, 16);
+    assert.equal(files.length, 17);
     for (const f of files) {
       assert.ok(fs.readFileSync(path.join(tmp, 'data', f)).equals(fs.readFileSync(path.join(ROOT, 'data', f))), f);
     }
@@ -48,7 +49,7 @@ test('regenerated files match the committed ones byte for byte', () => {
 });
 
 test('each entry carries its data file text and a mapping with a kind', () => {
-  assert.equal(EXAMPLES.length, 16);
+  assert.equal(EXAMPLES.length, 17);
   for (const e of EXAMPLES) {
     assert.equal(e.text, fs.readFileSync(path.join(ROOT, 'data', e.file), 'utf8'), e.file);
     assert.ok(['tally', 'time', 'reps'].includes(e.mapping.kind), e.id);
@@ -103,6 +104,33 @@ test('the 1-vs-2-servers examples need the pairing to tell the queues apart, as 
   assert.ok(unpaired.lo < 0 && unpaired.hi > 0, 'paired file read as independent [' + unpaired.lo + ', ' + unpaired.hi + ']');
   assert.ok(paired.lo > 0, 'paired interval [' + paired.lo + ', ' + paired.hi + ']');
   assert.ok(Array.from(paired.diffs).every(d => d > 0), 'differences ' + Array.from(paired.diffs));
+});
+
+// The example run in pairs loads as two datasets of 25 pair averages, the antithetic set first.
+// Its description says that the two sets share the first day of every pair, that the antithetic
+// pairs correlate at about -0.64 with a variance ratio near 0.36, and that the independent pairs
+// give about 0 and 1 and the wider interval.
+test('the antithetic example pairs as its description says, against the independent pairs', () => {
+  const ex = EXAMPLES.find(e => e.id === 'antithetic-pairs');
+  assert.equal(ex.pairs, true);
+  const sets = buildDatasets(sniff(ex.text, { name: ex.mapping.name }), ex.mapping).datasets;
+  assert.deepEqual(sets.map(d => d.name), ['Utilization · antithetic', 'Utilization · independent']);
+  const firsts = d => Array.from(repEstimates(d)).filter((_, i) => i % 2 === 0);
+  assert.deepEqual(firsts(sets[1]), firsts(sets[0]));
+  assert.notDeepEqual(Array.from(repEstimates(sets[1])), Array.from(repEstimates(sets[0])));
+  const [av, ind] = sets.map(d => {
+    const res = pairAverages(d);
+    assert.ok(res.ok, d.name);
+    assert.equal(res.stats.pairs, 25, d.name);
+    return res;
+  });
+  assert.ok(Math.abs(ind.stats.r) < 0.1, 'independent r ' + ind.stats.r);
+  assert.ok(ind.stats.ratio > 0.9 && ind.stats.ratio < 1.1, 'independent ratio ' + ind.stats.ratio);
+  assert.ok(av.stats.r < -0.6 && av.stats.r > -0.7, 'antithetic r ' + av.stats.r);
+  assert.ok(av.stats.ratio > 0.3 && av.stats.ratio < 0.42, 'antithetic ratio ' + av.stats.ratio);
+  const hw = res => tInterval(Array.from(repEstimates(res.dataset)), 0.95).hw;
+  assert.ok(hw(av) < hw(ind), 'half-widths ' + hw(av) + ' and ' + hw(ind));
+  assert.equal(EXAMPLES.filter(e => e.pairs).length, 1);
 });
 
 // The customers-served example exists to show a pooled one-way analysis of variance with no

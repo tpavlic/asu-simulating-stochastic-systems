@@ -12,7 +12,7 @@
 // are never transformed.
 
 import * as state from '../state.js';
-import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
+import { repEstimates, repIds, observations, canInfer, pairStats } from '../data/model.js';
 import { summary, sortedCopy } from '../stats/descriptive.js';
 import { normInv } from '../stats/special.js';
 import { tInterval, varianceInterval, oneSampleT, predictionInterval, quantileInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
@@ -38,6 +38,7 @@ const POOLED = 'pooled observations';
 let root = null;
 let els = null;
 let fig = null;
+let pairsFig = null;
 let dsPicker = null;
 // The replication plan, set by a target half-width or by a target power. The
 // half-width target is 'relative' (a percent of the mean) or 'absolute' (in
@@ -55,7 +56,7 @@ let resultBase = null;
 // planning target (`mu0For` is that key; `mu0Step` is its field's step, which
 // the dragged line on the plot moves by), whether the test is on at all, and
 // the quantile's p, both settings for the page.
-const extra = { mu0: null, mu0For: null, mu0Spin: null, mu0Step: 1, test: false, qp: 0.9 };
+const extra = { mu0: null, mu0For: null, mu0Spin: null, mu0Step: 1, test: false, qp: 0.9, pairsView: 'pairs' };
 // The override is remembered per dataset, and so ticking it on one dataset
 // never silently applies to the next one chosen.
 const override = new Set();
@@ -317,6 +318,24 @@ export function render(rootEl) {
   qSec.append(qCtrl, qTab, qNote);
   const qHow = details('How the quantile and its interval are found', '<div id="rp-q-how"></div>');
   qSec.appendChild(qHow);
+  // The antithetic pairs, for a dataset loaded as pair averages: each pair's
+  // two replication outcomes and their average, the replication value the
+  // interval above is formed from.
+  const pairsSec = el('div');
+  pairsSec.hidden = true;
+  pairsSec.appendChild(el('div', 'sub-hd', 'Antithetic pairs'));
+  const pairsLede = el('p', 'exp-note');
+  const pairsBox = el('div'), pairsLeg = el('div'), pairsCap = el('p', 'rv-cap');
+  const pairsCtrl = el('div', 'ctrl-row');
+  pairsCtrl.innerHTML = '<span class="ctrl-lbl" id="rp-pv-lbl">Show the replications</span>' +
+    '<span class="seg" role="group" aria-labelledby="rp-pv-lbl">' +
+      '<button type="button" class="seg-btn" data-pv="pairs" aria-pressed="true">As pairs</button>' +
+      '<button type="button" class="seg-btn" data-pv="order" aria-pressed="false">In run order</button>' +
+    '</span>';
+  pairsSec.append(pairsLede, pairsCtrl, pairsBox, pairsLeg, pairsCap);
+  pairsFig = makeFigure(pairsBox, { height: 240, narrowHeight: 240, margin: { t: 10, b: 42 }, ariaLabel: 'Each antithetic pair’s two replication outcomes and their average' });
+  exportButtons(pairsBox, pairsFig, 'antithetic-pairs');
+  res.appendChild(pairsSec);
   res.appendChild(qSec);
   res.appendChild(varSec);
 
@@ -339,7 +358,7 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { varSec, vTab, varLede, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
+  els = { pairsSec, pairsLede, pairsCtrl, pairsLeg, pairsCap, varSec, vTab, varLede, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
           qHow: qHow.querySelector('#rp-q-how'), mu0Box: testCtrl.querySelector('#rp-mu0-box'), mu0Unit: testCtrl.querySelector('#rp-mu0-unit'), mu0On: testCtrl.querySelector('#rp-mu0-on'), mu0Pair: testCtrl.querySelector('#rp-mu0-pair'), qp: qSec.querySelector('#rp-qp'),
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
@@ -385,6 +404,17 @@ export function render(rootEl) {
   if (typeof qp === 'number' && qp > 0 && qp < 1) extra.qp = qp;
   els.qp.value = String(extra.qp);
   spinner(els.qp, { min: 0.01, max: 0.99, step: 0.05, decimals: 2, onChange: v => { extra.qp = v; state.setPick(id, 'quantileP', v); draw(); } });
+  // The antithetic pairs drawn as pairs or in run order, a setting for the page.
+  if (state.getPick(id, 'pairsView') === 'order') extra.pairsView = 'order';
+  const syncPv = () => els.pairsCtrl.querySelectorAll('[data-pv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pv === extra.pairsView)));
+  syncPv();
+  els.pairsCtrl.querySelectorAll('[data-pv]').forEach(b => b.addEventListener('click', () => {
+    if (extra.pairsView === b.dataset.pv) return;
+    extra.pairsView = b.dataset.pv;
+    state.setPick(id, 'pairsView', extra.pairsView);
+    syncPv();
+    draw();
+  }));
   extra.test = state.getPick(id, 'testMu0') === true;
   els.mu0On.checked = extra.test;
   els.mu0On.addEventListener('change', () => { extra.test = els.mu0On.checked; state.setPick(id, 'testMu0', extra.test); draw(); });
@@ -1034,7 +1064,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
   // Past the cap (pooled observations only) the scripts read the CSV file `files` names.
-  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { mu0: extra.test } })),
+  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { mu0: extra.test, pairsOrder: extra.pairsView === 'order' } })),
     files: [{ ds: recipeIn.ds, form: recipeIn.pooled ? 'observations' : 'replications' }] };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
@@ -1069,7 +1099,105 @@ function overrideBlock(ds, on, oneRep) {
   return box;
 }
 
+/**
+ * The pairs of a dataset loaded as antithetic pair averages, one column per
+ * pair: the pair's first replication as a filled dot and its second as a
+ * hollow one, joined by a thin line, with the pair averages as a heavy line
+ * through them and, when the test is on and no transform is, the stated mean
+ * dashed. Hidden for any other dataset, and for one stored before the pairs'
+ * outcomes were kept.
+ */
+function drawPairs(d) {
+  const P = d && d.ds && d.ds.source.pairs;
+  const on = !!(P && Array.isArray(P.first) && P.first.length >= 2);
+  els.pairsSec.hidden = !on;
+  if (!on) return;
+  const a = P.first, b = P.second, n = a.length;
+  const avg = a.map((v, k) => (v + b[k]) / 2);
+  const ids = repIds(d.ds).map(String);
+  const mu0 = d.mu0 && (!d.tf || d.tf === 'none') ? d.mu0.value : null;
+  const st = pairStats(a, b);
+  // Two decimals, and 0 rather than −0 for a value that rounds to zero.
+  const two = v => { const x = Math.round(v * 100) / 100; return num(x === 0 ? 0 : x); };
+  els.pairsLede.innerHTML = 'The ' + intl(n) + ' replication values are pair averages, of replications 1 and 2, 3 and 4, and so on. ' +
+    'Correlation within the pairs: <strong>r = ' + esc(two(st.r)) + '</strong> (ideally r &lt; 0). Variance of the pair averages, (s₁² + s₂² + 2r s₁s₂)/4 = ' + esc(num(st.varPaired)) +
+    '; variance if the two replications of each pair were independent, (s₁² + s₂²)/4 = ' + esc(num(st.varIndependent)) +
+    '; antithetic:independent variance ratio is <strong>' + esc(two(st.ratio)) + '</strong> (ideally ratio &lt; 1). Independent pairs have a ratio of about 1, but anticorrelated pairs (r &lt; 0) have a ratio below 1. ' +
+    'A ratio above 1 means the antithetic pairing increased the variance relative to independent pairs.';
+  // As pairs, each pair is one column; in run order, each replication is its
+  // own column, the pair's two side by side, joined in sequence by a light
+  // line, with each pair average drawn between its two replications.
+  const order = extra.pairsView === 'order';
+  const ks = Array.from({ length: n }, (_, k) => k + 1);
+  const xa = order ? ks.map(k => 2 * k - 1) : ks, xb = order ? ks.map(k => 2 * k) : ks, xm = order ? ks.map(k => 2 * k - 0.5) : ks;
+  const cols = order ? 2 * n : n;
+  pairsFig.render(f => {
+    const sx = f.x([0.5, cols + 0.5]);
+    const sy = f.y(extent(a, b, mu0 != null ? [mu0] : null), { pad: 0.06, nice: true });
+    f.axes({ xInteger: true, xLabel: order ? 'Replication' : 'Pair', yLabel: outcomeAxis(d.ds, false, 'none') });
+    const cEst = tok('--est'), cTruth = tok('--truth'), cPair = tok('--pair'), cCard = tok('--card'), cText = tok('--text');
+    const spacing = f.iw / cols;
+    const r = Math.max(2.2, Math.min(f.narrow ? 4 : 4.5, spacing * (order ? 0.45 : 0.36)));
+    if (mu0 != null) {
+      svgEl('line', { x1: 0, x2: f.iw, y1: sy(mu0), y2: sy(mu0), stroke: cText, 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, f.inner);
+    }
+    const seqX = [], seqY = [];
+    if (order) {
+      for (let k = 0; k < n; k++) { seqX.push(xa[k], xb[k]); seqY.push(a[k], b[k]); }
+      svgEl('polyline', { points: seqX.map((x, i) => sx(x).toFixed(1) + ',' + sy(seqY[i]).toFixed(1)).join(' '), fill: 'none', stroke: cPair, 'stroke-width': 1.2,
+        'stroke-linejoin': 'round', class: 'm-pair-seq' }, f.inner);
+    } else {
+      // The link runs between the two dots' rims, and so it never shows
+      // through the hollow dot.
+      const gLink = svgEl('g', { class: 'm-pair-link' }, f.inner);
+      for (let k = 0; k < n; k++) {
+        const px = sx(k + 1), ya = sy(a[k]), yb = sy(b[k]);
+        if (Math.abs(ya - yb) > 2 * r + 2) {
+          const dir = yb > ya ? 1 : -1;
+          svgEl('line', { x1: px, x2: px, y1: ya + dir * (r + 1), y2: yb - dir * (r + 1), stroke: cPair, 'stroke-width': 1.5 }, gLink);
+        }
+      }
+    }
+    svgEl('polyline', { points: xm.map((x, k) => sx(x).toFixed(1) + ',' + sy(avg[k]).toFixed(1)).join(' '), fill: 'none', stroke: cTruth, 'stroke-width': 3,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round', class: 'm-pair-avg' }, f.inner);
+    const gB = svgEl('g', { class: 'm-pair-b' }, f.inner), gA = svgEl('g', { class: 'm-pair-a' }, f.inner);
+    for (let k = 0; k < n; k++) {
+      svgEl('circle', { cx: sx(xb[k]), cy: sy(b[k]), r, fill: cCard, stroke: cEst, 'stroke-width': 2 }, gB);
+      svgEl('circle', { cx: sx(xa[k]), cy: sy(a[k]), r, fill: cEst, stroke: cCard, 'stroke-width': 1 }, gA);
+    }
+    if (mu0 != null) f.series.push({ kind: 'hline', y: mu0, color: cText, dash: true, label: 'stated mean mu0' });
+    f.series.push(order
+      ? { kind: 'line', x: seqX, y: seqY, color: cPair, width: 1.2, label: 'replications in run order' }
+      : { kind: 'segments', x0: ks, x1: ks, y0: a.slice(), y1: b.slice(), color: cPair, label: 'pair' },
+    { kind: 'line', x: xm.slice(), y: avg, color: cTruth, width: 3, label: 'pair average' },
+    { kind: 'points', x: xb.slice(), y: b.slice(), color: cEst, hollow: true, label: 'second replication of the pair' },
+    { kind: 'points', x: xa.slice(), y: a.slice(), color: cEst, label: 'first replication of the pair' });
+    f.readout((dx, dy, px) => {
+      const c = Math.round(sx.invert(px));
+      if (c < 1 || c > cols || Math.abs(sx(c) - px) > Math.max(12, spacing / 2)) return null;
+      const k = order ? Math.ceil(c / 2) - 1 : c - 1;
+      const pair = 'pair ' + (k + 1) + (ids[k] ? ' (replications ' + ids[k].replace('-', ' and ') + ')' : '');
+      if (!order) return [pair, 'first ' + num(a[k]) + ', second ' + num(b[k]), 'average ' + num(avg[k])];
+      return ['replication ' + c + ', the ' + (c % 2 ? 'first' : 'second') + ' of ' + pair, 'outcome ' + num(c % 2 ? a[k] : b[k]), 'pair average ' + num(avg[k])];
+    });
+  });
+  const items = [
+    { swatch: 'dot', color: '--est', label: 'first replication of the pair' },
+    { swatch: 'hollow', color: '--est', label: 'second replication of the pair' }
+  ];
+  if (order) items.push({ swatch: 'thin', color: '--pair', label: 'replications in run order' });
+  items.push({ swatch: 'line', color: '--truth', label: 'pair average, the replication value analyzed' });
+  if (mu0 != null) items.push({ swatch: 'dash', color: '--text', label: 'stated mean μ₀' });
+  legend(els.pairsLeg, items, pairsFig);
+  els.pairsCap.textContent = order
+    ? 'Each replication in the order it was run, the first of each pair filled and the second hollow, joined in sequence by the thin line; the heavy line is each pair’s average, drawn between its two replications. ' +
+      'In antithetic pairs the thin line zigzags, a busy run followed by a quiet one, and the pair averages stay closer to the mean than the replications do.'
+    : 'Each column is one pair: its first replication filled, its second hollow, and the line joining them the gap between the two. ' +
+      'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run with a quiet one, and so the heavy line of pair averages varies less than the dots do.';
+}
+
 function drawFigure(d) {
+  drawPairs(d);
   const level = state.settings.level;
   const cEst = '--est', cTruth = '--truth';
   if (!d || !d.values.length) {

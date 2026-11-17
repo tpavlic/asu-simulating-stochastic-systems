@@ -840,7 +840,8 @@ if (window.self !== window.top) {
 /**
  * Bundled example datasets. `text` is the file's contents as the importer reads it, and
  * `mapping` is the column assignment that loads it without a dialog (column indices, 0-based).
- * @type {{id: string, title: string, file: string, kind: 'tally'|'time'|'reps', format: 'minus1'|'columns', description: string, text: string, mapping: object}[]}
+ * `pairs` loads the replications as antithetic pair averages, as the import dialog's box does.
+ * @type {{id: string, title: string, file: string, kind: 'tally'|'time'|'reps', format: 'minus1'|'columns', pairs?: boolean, description: string, text: string, mapping: object}[]}
  */
 export const EXAMPLES = [
   {
@@ -872,6 +873,118 @@ export const EXAMPLES = [
 18,3.1763,11.7473,461
 19,2.8468,12.2701,487
 20,1.8957,7.0777,478
+`
+  },
+  {
+    id: "antithetic-pairs",
+    title: "Antithetic variates against independent pairs (utilization, 25 pairs each)",
+    file: "antithetic_pairs.csv",
+    kind: "reps",
+    format: "columns",
+    pairs: true,
+    description: "The fraction of an 8-hour day that the server of a single-server queue is busy, with exponential interarrival times (mean 1 minute) and service times (mean 0.8 minute), run twice, as two datasets. The antithetic set is 25 antithetic pairs: each odd day on fresh random numbers and the day after it on their complements, 1 − U for every interarrival and service draw, and so a busy day is paired with a quiet one. The independent set runs the same first day of each pair, partnered with a day on fresh random numbers instead of the complements, and so the partner is the only difference between the two sets. Each loads as its 25 pair averages, and One System draws the pairs under the interval: switching between the two sets moves only the hollow dots and the pair averages. In the antithetic set the correlation within the pairs is about −0.64 and the variance ratio about 0.36; in the independent set they are about 0 and 1, and its interval is the wider.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Utilization","endTime":null,"blocks":false},
+    text: `pairing,replication,utilization
+antithetic,1,0.8619
+antithetic,2,0.6956
+antithetic,3,0.6815
+antithetic,4,0.8094
+antithetic,5,0.7883
+antithetic,6,0.7973
+antithetic,7,0.83
+antithetic,8,0.7806
+antithetic,9,0.7597
+antithetic,10,0.8308
+antithetic,11,0.7794
+antithetic,12,0.8413
+antithetic,13,0.7632
+antithetic,14,0.8686
+antithetic,15,0.8319
+antithetic,16,0.7057
+antithetic,17,0.8533
+antithetic,18,0.7876
+antithetic,19,0.8133
+antithetic,20,0.7482
+antithetic,21,0.7367
+antithetic,22,0.8369
+antithetic,23,0.8302
+antithetic,24,0.779
+antithetic,25,0.7579
+antithetic,26,0.8115
+antithetic,27,0.7957
+antithetic,28,0.7392
+antithetic,29,0.7532
+antithetic,30,0.9406
+antithetic,31,0.777
+antithetic,32,0.7942
+antithetic,33,0.972
+antithetic,34,0.7193
+antithetic,35,0.7678
+antithetic,36,0.8179
+antithetic,37,0.7807
+antithetic,38,0.757
+antithetic,39,0.8309
+antithetic,40,0.8136
+antithetic,41,0.8567
+antithetic,42,0.7464
+antithetic,43,0.7423
+antithetic,44,0.809
+antithetic,45,0.7984
+antithetic,46,0.7358
+antithetic,47,0.9061
+antithetic,48,0.6892
+antithetic,49,0.7972
+antithetic,50,0.8604
+independent,1,0.8619
+independent,2,0.7057
+independent,3,0.6815
+independent,4,0.8342
+independent,5,0.7883
+independent,6,0.8043
+independent,7,0.83
+independent,8,0.7971
+independent,9,0.7597
+independent,10,0.7784
+independent,11,0.7794
+independent,12,0.7822
+independent,13,0.7632
+independent,14,0.8476
+independent,15,0.8319
+independent,16,0.8368
+independent,17,0.8533
+independent,18,0.7234
+independent,19,0.8133
+independent,20,0.789
+independent,21,0.7367
+independent,22,0.7749
+independent,23,0.8302
+independent,24,0.7992
+independent,25,0.7579
+independent,26,0.729
+independent,27,0.7957
+independent,28,0.8106
+independent,29,0.7532
+independent,30,0.8446
+independent,31,0.777
+independent,32,0.7707
+independent,33,0.972
+independent,34,0.8577
+independent,35,0.7678
+independent,36,0.7295
+independent,37,0.7807
+independent,38,0.8129
+independent,39,0.8309
+independent,40,0.7374
+independent,41,0.8567
+independent,42,0.8514
+independent,43,0.7423
+independent,44,0.8353
+independent,45,0.7984
+independent,46,0.8868
+independent,47,0.9061
+independent,48,0.7942
+independent,49,0.7972
+independent,50,0.7702
 `
   },
   {
@@ -22787,8 +22900,9 @@ C,12,479.52,0
  * the same id in two datasets of that load is one block (the same subject,
  * batch, day, or random-number stream), and so a comparison of datasets from
  * the load is paired by default. Datasets from different loads never are.
- * `source.pairs` says that the file's replications were loaded as antithetic
- * pair averages (see pairAverages). */
+ * `source.pairs`, when set, says that the file's replications were loaded as
+ * antithetic pair averages, and holds each pair's two outcomes (see
+ * pairAverages). */
 
 /** How each dataset kind is named in page text and in a data file's # lines. */
 export const KIND_LABEL = { tally: 'tally', time: 'time-persistent', reps: 'replication values' };
@@ -22864,6 +22978,17 @@ function toF64(a) {
   return a instanceof Float64Array ? a : Float64Array.from(a);
 }
 
+// A dataset's antithetic pairs as `source.pairs` keeps them: each pair's two
+// outcomes as plain arrays of one length. True, from a session stored before
+// the outcomes were kept or holding pairs that cannot be drawn, still marks
+// the dataset as pair averages; anything that is not an object marks nothing.
+function pairsField(p) {
+  if (p === true) return true;
+  if (!p || typeof p !== 'object') return null;
+  const ok = v => Array.isArray(v) && v.every(x => typeof x === 'number' && Number.isFinite(x));
+  return ok(p.first) && ok(p.second) && p.first.length === p.second.length ? { first: p.first.slice(), second: p.second.slice() } : true;
+}
+
 /**
  * Build a dataset from partial fields, filling defaults, converting each
  * replication's vectors to Float64Array, and assigning an id (the given one,
@@ -22873,6 +22998,7 @@ function toF64(a) {
  */
 export function makeDataset(fields = {}) {
   const src = fields.source || {};
+  const pairs = pairsField(src.pairs);
   return {
     id: fields.id != null ? fields.id : newId(),
     name: fields.name != null ? fields.name : 'data',
@@ -22889,7 +23015,7 @@ export function makeDataset(fields = {}) {
       file: src.file != null ? src.file : '',
       format: src.format != null ? src.format : '',
       notes: (src.notes || []).slice()
-    }, src.pairs === true ? { pairs: true } : {}),
+    }, pairs ? { pairs } : {}),
     issues: (fields.issues || []).slice(),
     derivedFrom: fields.derivedFrom || null,
     loadId: fields.loadId != null ? fields.loadId : null,
@@ -23208,8 +23334,9 @@ export function canInfer(ds) {
  * observation is ever paired with another, and none is carried over. The
  * dataset takes its source's name with " (pair averages)", keeps its load and
  * blocks, and its source carries
- * `pairs: true` and a note with the two figures below, since the replications
- * it was made from are not loaded. Alongside it come the correlation r
+ * `pairs: { first, second }`, the outcomes of each pair's two replications in
+ * pair order, for One System's figure of the pairs, and a note with the two
+ * figures below, since the replications it was made from are not loaded. Alongside it come the correlation r
  * between the first and second
  * members across the pairs, and the variance ratio: the sample variance of
  * the averages over (s₁² + s₂²)/4, what averages of two independent
@@ -23248,15 +23375,7 @@ export function pairAverages(ds) {
     reps.push({ id: String(ids[i]) + '-' + String(ids[i + 1]), t: null, v: [(est[i] + est[i + 1]) / 2] });
   }
   const n = a.length;
-  const ma = mean(a), mb = mean(b);
-  let saa = 0, sbb = 0, sab = 0;
-  for (let k = 0; k < n; k++) { saa += (a[k] - ma) ** 2; sbb += (b[k] - mb) ** 2; sab += (a[k] - ma) * (b[k] - mb); }
-  const avg = reps.map(r => r.v[0]), mAvg = mean(avg);
-  let sAvg = 0;
-  for (const v of avg) sAvg += (v - mAvg) ** 2;
-  const varA = saa / (n - 1), varB = sbb / (n - 1), varAvg = sAvg / (n - 1);
-  const r = saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN;
-  const ratio = varA + varB > 0 ? varAvg / ((varA + varB) / 4) : NaN;
+  const { r, ratio } = pairStats(a, b);
   const dataset = makeDataset({
     name: ds.name + ' (pair averages)',
     response: ds.response,
@@ -23264,7 +23383,7 @@ export function pairAverages(ds) {
     kind: 'reps',
     reps,
     endTime: null,
-    source: { file: ds.source.file, format: ds.source.format, pairs: true, notes: ds.source.notes.concat(['Replications ' + String(ids[0]) + ' to ' + String(ids[R - 1]) + ' of ' + ds.name +
+    source: { file: ds.source.file, format: ds.source.format, pairs: { first: a, second: b }, notes: ds.source.notes.concat(['Replications ' + String(ids[0]) + ' to ' + String(ids[R - 1]) + ' of ' + ds.name +
       ' were run in antithetic pairs and loaded as ' + n + ' pair averages (1 and 2, 3 and 4, …): correlation within the pairs r = ' + sig3(r) +
       ', variance ratio ' + sig3(ratio) + ', the sample variance of the averages over what averages of two independent replications would have.']) },
     issues: ds.issues,
@@ -23272,6 +23391,29 @@ export function pairAverages(ds) {
     blocks: ds.blocks
   });
   return { ok: true, dataset, stats: { pairs: n, r, ratio } };
+}
+
+/**
+ * The correlation r between the first and second members of a set of pairs;
+ * the sample variance of the pair averages, `varPaired`, which equals
+ * (s₁² + s₂² + 2r s₁s₂)/4 exactly; (s₁² + s₂²)/4, the
+ * variance averages of two independent replications with the members'
+ * variances would have, `varIndependent`; and their ratio. r is NaN where a
+ * member does not vary, and the ratio where neither does.
+ * @param {ArrayLike<number>} a the pairs' first members
+ * @param {ArrayLike<number>} b their second members, in the same order
+ * @returns {{ r: number, ratio: number, varPaired: number, varIndependent: number }}
+ */
+export function pairStats(a, b) {
+  const n = a.length;
+  const ma = mean(a), mb = mean(b);
+  let saa = 0, sbb = 0, sab = 0, sAvg = 0;
+  for (let k = 0; k < n; k++) { saa += (a[k] - ma) ** 2; sbb += (b[k] - mb) ** 2; sab += (a[k] - ma) * (b[k] - mb); }
+  const mAvg = (ma + mb) / 2;
+  for (let k = 0; k < n; k++) sAvg += ((a[k] + b[k]) / 2 - mAvg) ** 2;
+  const r = saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN;
+  const ratio = saa + sbb > 0 ? sAvg / ((saa + sbb) / 4) : NaN;
+  return { r, ratio, varPaired: sAvg / (n - 1), varIndependent: (saa + sbb) / 4 / (n - 1) };
 }
 
 // Three significant digits, for a note; a dash where there is no number.
@@ -26792,13 +26934,29 @@ FIG_M.pairsByRep = `
 function fig_pairs_by_rep(a, b, ids, o)
 % Matched pairs side by side, one column per replication: design A as a
 % filled dot, design B as a hollow dot, joined by a dashed line.
-% Options: xlab and title.
+% Options: xlab, title, labels (the two legend names), avg_line (the pair
+% averages as a heavy line), ylab, ref (a dashed horizontal line), and order
+% (each replication in its own column, the pair's two side by side and all
+% of them joined in run order by a light line, with each pair average
+% between its two; ids then label the 2n columns).
 if nargin < 4, o = struct(); end
 c = fig_colors();
 a = a(:);
 b = b(:);
 n = numel(a);
-ids = fig_text_cell(ids, n);
+order = fig_opt(o, 'order', false);
+k = (1:n)';
+if order
+    xa = 2 * k - 1;
+    xb = 2 * k;
+    cols = 2 * n;
+else
+    xa = k;
+    xb = k;
+    cols = n;
+end
+xm = (xa + xb) / 2;
+ids = fig_text_cell(ids, cols);
 ttl = fig_opt(o, 'title', 'Pairs by replication');
 figure;
 fig_size(6.5, 3.5);
@@ -26808,20 +26966,35 @@ if n == 0
 end
 hold on;
 box on;
-x = (1:n)';
-xlim([0.5, n + 0.5]);
-ylim(fig_pad(fig_range([a; b]), 0.08));
-[px, py] = fig_segments(x, a, x, b);
-plot(px, py, 'Color', c.muted, 'LineStyle', '--');
-ha = plot(x, a, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 6);
-hb = plot(x, b, 'o', 'Color', c.est, 'MarkerFaceColor', 'w', 'MarkerSize', 6, ...
+ref = fig_opt(o, 'ref', NaN);
+xlim([0.5, cols + 0.5]);
+ylim(fig_pad(fig_range([a; b; ref(isfinite(ref))]), 0.08));
+if isfinite(ref)
+    plot([0.5, cols + 0.5], [ref, ref], 'Color', c.muted, 'LineStyle', '--');
+end
+names = fig_opt(o, 'labels', {'A', 'B'});
+names = names(:)';
+handles = [];
+if order
+    handles = plot(reshape([xa'; xb'], [], 1), reshape([a'; b'], [], 1), '-', 'Color', c.muted);
+    names = [names, {'run order'}];
+else
+    [px, py] = fig_segments(xa, a, xa, b);
+    plot(px, py, 'Color', c.muted, 'LineStyle', '--');
+end
+if fig_opt(o, 'avg_line', false)
+    handles = [handles, plot(xm, (a + b) / 2, '-', 'Color', c.truth, 'LineWidth', 3)];
+    names = [names, {'pair average'}];
+end
+ha = plot(xa, a, 'o', 'Color', c.est, 'MarkerFaceColor', c.est, 'MarkerSize', 6);
+hb = plot(xb, b, 'o', 'Color', c.est, 'MarkerFaceColor', 'w', 'MarkerSize', 6, ...
           'LineWidth', 1.2);
 % Label at most about 20 columns.
-every = ceil(n / 20);
-shown = 1:every:n;
+every = ceil(cols / 20);
+shown = 1:every:cols;
 set(gca, 'XTick', shown, 'XTickLabel', ids(shown), 'TickLabelInterpreter', 'none');
-legend([ha, hb], {'A', 'B'}, 'Location', 'best', 'Interpreter', 'none');
-fig_labels(ttl, fig_opt(o, 'xlab', 'Replication id'), 'Replication outcome');
+legend([ha, hb, handles], names, 'Location', 'best', 'Interpreter', 'none');
+fig_labels(ttl, fig_opt(o, 'xlab', 'Replication id'), fig_opt(o, 'ylab', 'Replication outcome'));
 hold off;
 end
 `;
@@ -27621,30 +27794,47 @@ def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, mu
 `;
 
 FIG_PY.pairsByRep = `
-def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replication"):
-    """Each matched pair as a filled dot (A) and a hollow dot (B) joined by a dashed segment."""
+def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replication",
+                     labels=("A", "B"), avg_line=False, ylab="Replication outcome", ref=None,
+                     order=False):
+    """Each matched pair as a filled dot (A) and a hollow dot (B) joined by a dashed segment;
+    avg_line adds the pair averages as a heavy line, and a finite ref a dashed horizontal line.
+    With order=True, each replication has its own column, the pair's two side by side and all
+    of them joined in run order by a light line, with each pair average between its two; ids
+    then label the 2n columns."""
     import matplotlib.pyplot as plt
     a = np.asarray(a, dtype=float).ravel()
     b = np.asarray(b, dtype=float).ravel()
     n = min(a.size, b.size)
     fig, ax = plt.subplots(figsize=(7.0, 4.0))
     if n == 0:
-        fig_empty(ax, title, xlab, "Replication outcome")
+        fig_empty(ax, title, xlab, ylab)
         fig.tight_layout()
         return fig
     a, b = a[:n], b[:n]
-    x = np.arange(1, n + 1)
-    ax.vlines(x, np.fmin(a, b), np.fmax(a, b), color=FIG_MUTED, linestyle="--", linewidth=1)
-    ax.plot(x, a, "o", color=FIG_EST, markersize=6, label="A")
-    ax.plot(x, b, "o", color=FIG_EST, markerfacecolor="white", markersize=6, label="B")
-    step = int(np.ceil(n / 20.0))
-    shown = list(range(0, n, step))
-    names = fig_labels(ids, n)
-    ax.set_xticks([x[k] for k in shown])
-    ax.set_xticklabels([names[k] for k in shown], rotation=45 if step == 1 and n > 10 else 0)
-    ax.set_xlim(0.4, n + 0.6)
+    k = np.arange(1, n + 1)
+    xa, xb, xm = (2 * k - 1, 2 * k, 2 * k - 0.5) if order else (k, k, k)
+    cols = 2 * n if order else n
+    if ref is not None and np.isfinite(ref):
+        ax.axhline(ref, color=FIG_MUTED, linestyle="--", linewidth=1.2)
+    if order:
+        ax.plot(np.column_stack([xa, xb]).ravel(), np.column_stack([a, b]).ravel(), color=FIG_MUTED,
+                linewidth=1, label="run order")
+    else:
+        ax.vlines(xa, np.fmin(a, b), np.fmax(a, b), color=FIG_MUTED, linestyle="--", linewidth=1)
+    if avg_line:
+        ax.plot(xm, (a + b) / 2, color=FIG_TRUTH, linewidth=3, label="pair average")
+    ax.plot(xa, a, "o", color=FIG_EST, markersize=6, label=labels[0])
+    ax.plot(xb, b, "o", color=FIG_EST, markerfacecolor="white", markersize=6, label=labels[1])
+    x = np.arange(1, cols + 1)
+    step = int(np.ceil(cols / 20.0))
+    shown = list(range(0, cols, step))
+    names = fig_labels(ids, cols)
+    ax.set_xticks([x[j] for j in shown])
+    ax.set_xticklabels([names[j] for j in shown], rotation=45 if step == 1 and cols > 10 else 0)
+    ax.set_xlim(0.4, cols + 0.6)
     ax.set_xlabel(xlab)
-    ax.set_ylabel("Replication outcome")
+    ax.set_ylabel(ylab)
     ax.set_title(title)
     ax.legend(loc="best")
     fig.tight_layout()
@@ -28297,29 +28487,59 @@ fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = 
 `;
 
 FIG_R.pairsByRep = `
-# Matched pairs by replication: design A as a filled dot, design B as a hollow dot, and a
-# dashed segment joining the two.
-fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication") {
+# Matched pairs by replication: the first of each pair (design A) as a filled dot, the second
+# (design B) as a hollow dot, and a dashed segment joining the two; avg_line adds the pair
+# averages as a heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each
+# replication has its own column, the pair's two side by side and all of them joined in run
+# order by a light line, with each pair average between its two; ids then label the 2n columns.
+fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
+                             labels = c("A", "B"), avg_line = FALSE, ylab = "Replication outcome",
+                             ref = NA, order = FALSE) {
   a <- as.numeric(a)
   b <- as.numeric(b)
   n <- length(a)
   if (n == 0 || length(fig_finite(c(a, b))) == 0) {
-    fig_empty(title, xlab, "Replication outcome")
+    fig_empty(title, xlab, ylab)
     return(invisible(NULL))
   }
-  ids <- rep_len(as.character(ids), n)
-  plot(c(0.5, n + 0.5), fig_ylim(c(a, b), 0.12), type = "n", axes = FALSE, xlab = xlab,
-       ylab = "Replication outcome", main = title)
-  x <- seq_len(n)
-  both <- is.finite(a) & is.finite(b)
-  segments(x[both], a[both], x[both], b[both], lty = 2, col = FIG_MUTED)
-  points(x, a, pch = 19, col = FIG_EST)
-  points(x, b, pch = 21, col = FIG_EST, bg = "white")
-  shown <- unique(round(seq(1, n, length.out = min(n, 20))))
+  if (order) {
+    xa <- 2 * seq_len(n) - 1
+    xb <- 2 * seq_len(n)
+    xm <- xa + 0.5
+  } else {
+    xa <- xb <- xm <- seq_len(n)
+  }
+  cols <- if (order) 2 * n else n
+  ids <- rep_len(as.character(ids), cols)
+  has_ref <- isTRUE(is.finite(ref))
+  plot(c(0.5, cols + 0.5), fig_ylim(c(a, b, if (has_ref) ref), 0.12), type = "n", axes = FALSE,
+       xlab = xlab, ylab = ylab, main = title)
+  if (has_ref) abline(h = ref, lty = 2, col = FIG_MUTED)
+  if (order) {
+    lines(as.vector(rbind(xa, xb)), as.vector(rbind(a, b)), col = FIG_MUTED)
+  } else {
+    both <- is.finite(a) & is.finite(b)
+    segments(xa[both], a[both], xa[both], b[both], lty = 2, col = FIG_MUTED)
+  }
+  if (avg_line) lines(xm, (a + b) / 2, col = FIG_TRUTH, lwd = 3)
+  points(xa, a, pch = 19, col = FIG_EST)
+  points(xb, b, pch = 21, col = FIG_EST, bg = "white")
+  shown <- unique(round(seq(1, cols, length.out = min(cols, 20))))
   axis(1, at = shown, labels = ids[shown])
   axis(2, las = 1)
   box()
-  legend("top", legend = c("A", "B"), pch = c(19, 21), col = FIG_EST, pt.bg = "white",
+  names <- labels
+  pch <- c(19, 21)
+  lty <- c(NA, NA)
+  lwd <- c(NA, NA)
+  col <- c(FIG_EST, FIG_EST)
+  if (order) {
+    names <- c(names, "run order"); pch <- c(pch, NA); lty <- c(lty, 1); lwd <- c(lwd, 1); col <- c(col, FIG_MUTED)
+  }
+  if (avg_line) {
+    names <- c(names, "pair average"); pch <- c(pch, NA); lty <- c(lty, 1); lwd <- c(lwd, 3); col <- c(col, FIG_TRUTH)
+  }
+  legend("top", legend = names, pch = pch, lty = lty, lwd = lwd, col = col, pt.bg = "white",
          horiz = TRUE, bty = "n")
   invisible(NULL)
 }
@@ -28936,25 +29156,50 @@ fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = 
 `;
 
 FIG_TIDY.pairsByRep = `
-# One column per matched pair: design A as a filled dot, design B as a hollow dot, joined by a
-# dashed segment.
-fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication") {
+# One column per matched pair: the first of each pair (design A) as a filled dot, the second
+# (design B) as a hollow dot, joined by a dashed segment; avg_line adds the pair averages as a
+# heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each replication has
+# its own column, the pair's two side by side and all of them joined in run order by a light
+# line, with each pair average between its two; ids then label the 2n columns.
+fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
+                             labels = c("A", "B"), avg_line = FALSE, ylab = "Replication outcome",
+                             ref = NA, order = FALSE) {
   n <- length(a)
-  if (n == 0) return(fig_empty(title, xlab, "Replication outcome"))
-  d <- tibble(k = seq_len(n), a = as.numeric(a), b = as.numeric(b))
+  if (n == 0) return(fig_empty(title, xlab, ylab))
+  k <- seq_len(n)
+  d <- tibble(xa = if (order) 2 * k - 1 else k, xb = if (order) 2 * k else k,
+              a = as.numeric(a), b = as.numeric(b))
+  cols <- if (order) 2 * n else n
   both <- filter(d, is.finite(a), is.finite(b))
-  long <- bind_rows(tibble(k = d$k, y = d$a, design = "A"), tibble(k = d$k, y = d$b, design = "B")) %>%
+  long <- bind_rows(tibble(x = d$xa, y = d$a, design = labels[1]), tibble(x = d$xb, y = d$b, design = labels[2])) %>%
+    mutate(design = factor(design, levels = labels)) %>%
     filter(is.finite(y))
-  keep <- seq(1, n, by = max(1, ceiling(n / 20)))
-  p <- ggplot() +
-    geom_segment(data = both, aes(x = k, xend = k, y = a, yend = b), linetype = "dashed",
-                 color = FIG_MUTED) +
-    geom_point(data = long, aes(x = k, y = y, shape = design, fill = design), color = FIG_EST,
+  keep <- seq(1, cols, by = max(1, ceiling(cols / 20)))
+  shown_lines <- c(if (order) "run order", if (avg_line) "pair average")
+  p <- ggplot()
+  if (isTRUE(is.finite(ref))) p <- p + geom_hline(yintercept = ref, linetype = "dashed", color = FIG_MUTED)
+  if (order) {
+    run <- tibble(x = as.vector(rbind(d$xa, d$xb)), y = as.vector(rbind(d$a, d$b))) %>% filter(is.finite(y))
+    p <- p + geom_line(data = run, aes(x = x, y = y, color = "run order"), linewidth = 0.4)
+  } else {
+    p <- p + geom_segment(data = both, aes(x = xa, xend = xa, y = a, yend = b), linetype = "dashed",
+                          color = FIG_MUTED)
+  }
+  if (avg_line) {
+    p <- p + geom_line(data = mutate(both, m = (a + b) / 2, xm = (xa + xb) / 2),
+                       aes(x = xm, y = m, color = "pair average"), linewidth = 1.2)
+  }
+  if (length(shown_lines)) {
+    p <- p + scale_color_manual(values = c("run order" = FIG_MUTED, "pair average" = FIG_TRUTH)[shown_lines],
+                                breaks = shown_lines, name = NULL)
+  }
+  p <- p +
+    geom_point(data = long, aes(x = x, y = y, shape = design, fill = design), color = FIG_EST,
                size = 2.6, stroke = 0.8) +
-    scale_shape_manual(values = c(A = 21, B = 21)) +
-    scale_fill_manual(values = c(A = FIG_EST, B = "white")) +
-    scale_x_continuous(breaks = keep, labels = as.character(ids)[keep]) +
-    labs(x = xlab, y = "Replication outcome", title = title, shape = NULL, fill = NULL) +
+    scale_shape_manual(values = setNames(c(21, 21), labels)) +
+    scale_fill_manual(values = setNames(c(FIG_EST, "white"), labels)) +
+    scale_x_continuous(breaks = keep, labels = rep_len(as.character(ids), cols)[keep]) +
+    labs(x = xlab, y = ylab, title = title, shape = NULL, fill = NULL) +
     fig_theme()
   print(p)
   invisible(p)
@@ -29318,8 +29563,10 @@ fig_batches <- function(x, y, starts, ends, means, xlab, ylab, title, step = FAL
 //     right, brackets, ok): a forest plot, row 1 at the top; flagged rows red
 //     and dashed, muted rows gray, ok rows green; text at each row's right,
 //     and a bracket joining each pair of rows given.
-//   fig_pairs_by_rep(a, b, ids; xlab, title) and
-//   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs.
+//   fig_pairs_by_rep(a, b, ids; xlab, title, labels, avg_line, ylab, ref) and
+//   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs; avg_line
+//     draws the pair averages as a heavy line, ref a dashed line, and order
+//     each replication in its own column, joined in run order.
 //   fig_hist(x, edges, xlab, title), fig_ecdf(x, xlab, title),
 //   fig_box(x, xlab, title), fig_qq(x, ylab, title; xlab).
 //   fig_value_edges(x): bin edges giving one bin per value, on the
@@ -29424,11 +29671,23 @@ function oneFigures(r, L) {
   }
   if (F.mu0) opts.ref = 'mu0';
   const what = (o.np ? 'the Wilcoxon signed-rank interval on the pseudo-median' : 'the t interval on the mean');
-  return {
-    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line; the interval is drawn red and dashed when it excludes mu0, which is when the test rejects it.' : '.')],
-    calls: call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts),
-    fig: ['strips']
-  };
+  const notes = [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line; the interval is drawn red and dashed when it excludes mu0, which is when the test rejects it.' : '.')];
+  const calls = call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts);
+  const fig = ['strips'];
+  // A dataset loaded as antithetic pair averages: each pair's two outcomes,
+  // which the data above do not hold, and their average, the outcome analyzed.
+  if (F.pairs) {
+    const n = F.pairs.first.length, order = !!F.pairs.order;
+    calls.push(L.assign('pair_first', L.vec(F.pairs.first)), L.assign('pair_second', L.vec(F.pairs.second)),
+      ...call(L, 'fig_pairs_by_rep', ['pair_first', 'pair_second', L.vec(Array.from({ length: order ? 2 * n : n }, (_, k) => k + 1))],
+        { xlab: L.str(order ? 'Replication' : 'Pair'), title: L.str('Antithetic pairs'), labels: strsOf(L, ['first replication of the pair', 'second replication of the pair']),
+          avg_line: L.bool(true), ylab: L.str(F.pairs.ylab), ref: F.mu0 && (!r.transform || r.transform === 'none') ? 'mu0' : undefined,
+          order: order ? L.bool(true) : undefined }));
+    notes.push('The antithetic pairs, the first replication of each filled and the second hollow' + (order ? ', in run order and joined in sequence,' : '') +
+      ' with the pair averages as a heavy line' + (F.mu0 && (!r.transform || r.transform === 'none') ? ' and mu0 dashed.' : '.'));
+    fig.push('pairsByRep');
+  }
+  return { notes, calls, fig };
 }
 
 // ── Two Systems ──────────────────────────────────────────────────────────
@@ -30510,6 +30769,12 @@ export function oneRecipe({ ds, x, ids, pooled, proc, level, title, provenance, 
   r.fig = { xlab: outcomeAxis(ds, pooled, tf), label: ds.name, title: pooled ? 'Pooled observations' : 'Replication outcomes' };
   // The stated mean as a dashed line, when the page drew it.
   r.fig.mu0 = !!(view && view.mu0) && !!test;
+  // A dataset loaded as antithetic pair averages: the page's figure of the
+  // pairs, which needs each pair's two outcomes.
+  const P = !pooled && ds.source && ds.source.pairs;
+  if (P && Array.isArray(P.first) && P.first.length >= 2) {
+    r.fig.pairs = { first: P.first.slice(), second: P.second.slice(), ylab: outcomeAxis(ds, false, 'none'), order: !!(view && view.pairsOrder) };
+  }
   // A relative target is carried as the percentage, and the script works out
   // plan_h from the data's own mean, so that it follows the data if they are edited.
   r.settings = !planOut ? {}
@@ -37235,7 +37500,7 @@ export function render(root) {
   // missing from every group (a new one, say) is listed at the end under no
   // label rather than dropped.
   const groups = [
-    { label: 'One System', ids: ['queue-reps'] },
+    { label: 'One System', ids: ['queue-reps', 'antithetic-pairs'] },
     { label: 'Two Systems', ids: ['two-independent', 'two-crn', 'servers-independent', 'servers-crn', 'muffin-oven'] },
     { label: 'Several Systems', ids: ['customers-served', 'versus-control', 'four-designs', 'four-crn', 'six-designs', 'service-level'] },
     { label: 'Steady State and within-run data', ids: ['transient', 'steady-long', 'queue-length', 'utilization'] }
@@ -37254,7 +37519,7 @@ export function render(root) {
   els.exLoad.addEventListener('click', () => loadExample(els.ex.value));
   els.exMap.addEventListener('click', () => {
     const ex = EXAMPLES.find(x => x.id === els.ex.value);
-    if (ex) enqueue(ex.file, ex.text, ex.mapping && ex.mapping.name, ex.kind, ex.mapping && ex.mapping.endTime);
+    if (ex) enqueue(ex.file, ex.text, ex.mapping && ex.mapping.name, ex.kind, ex.mapping && ex.mapping.endTime, !!ex.pairs);
   });
 
   state.on('datasets', () => { if (visible()) renderList(); });
@@ -37329,9 +37594,9 @@ function enqueueArena(fileName, src) {
 }
 
 // Queues one text for the mapping dialog and shows it when nothing else is
-// waiting.
-function enqueue(fileName, text, displayName, kind, endTime) {
-  queue.push({ fileName, text, displayName, kind, endTime });
+// waiting; `pairs` ticks the antithetic-pairs box, as for an example run in pairs.
+function enqueue(fileName, text, displayName, kind, endTime, pairs = false) {
+  queue.push({ fileName, text, displayName, kind, endTime, pairs });
   if (!pending) nextPending();
   else updateWaiting();
 }
@@ -37379,7 +37644,7 @@ function nextPending() {
       name, endTime: null, blocks: !!s.blocks
     },
     endText: it.endTime != null ? String(it.endTime) : '',
-    pairs: false,
+    pairs: !!it.pairs,
     wide: false,
     wideCols: null
   };
@@ -37397,7 +37662,9 @@ function loadExample(exId) {
     const res = buildDatasets(sn, ex.mapping);
     if (!res.datasets.length) throw new Error('The example produced no datasets.');
     for (const ds of res.datasets) ds.source.file = ex.file;
-    const { added, skipped } = addNew(res.datasets);
+    // An example run in antithetic pairs loads as its pair averages, as the
+    // dialog's box would load it.
+    const { added, skipped } = addNew(ex.pairs ? averagePairs(res.datasets).datasets : res.datasets);
     lastImport = {
       what: 'the example “' + ex.title + '”',
       datasets: added,
@@ -38120,7 +38387,7 @@ export default { id, title, render, onShow };
 // are never transformed.
 
 import * as state from '../state.js';
-import { repEstimates, repIds, observations, canInfer } from '../data/model.js';
+import { repEstimates, repIds, observations, canInfer, pairStats } from '../data/model.js';
 import { summary, sortedCopy } from '../stats/descriptive.js';
 import { normInv } from '../stats/special.js';
 import { tInterval, varianceInterval, oneSampleT, predictionInterval, quantileInterval, planReplications, powerOneSample, planPowerOneSample } from '../stats/intervals.js';
@@ -38146,6 +38413,7 @@ const POOLED = 'pooled observations';
 let root = null;
 let els = null;
 let fig = null;
+let pairsFig = null;
 let dsPicker = null;
 // The replication plan, set by a target half-width or by a target power. The
 // half-width target is 'relative' (a percent of the mean) or 'absolute' (in
@@ -38163,7 +38431,7 @@ let resultBase = null;
 // planning target (`mu0For` is that key; `mu0Step` is its field's step, which
 // the dragged line on the plot moves by), whether the test is on at all, and
 // the quantile's p, both settings for the page.
-const extra = { mu0: null, mu0For: null, mu0Spin: null, mu0Step: 1, test: false, qp: 0.9 };
+const extra = { mu0: null, mu0For: null, mu0Spin: null, mu0Step: 1, test: false, qp: 0.9, pairsView: 'pairs' };
 // The override is remembered per dataset, and so ticking it on one dataset
 // never silently applies to the next one chosen.
 const override = new Set();
@@ -38425,6 +38693,24 @@ export function render(rootEl) {
   qSec.append(qCtrl, qTab, qNote);
   const qHow = details('How the quantile and its interval are found', '<div id="rp-q-how"></div>');
   qSec.appendChild(qHow);
+  // The antithetic pairs, for a dataset loaded as pair averages: each pair's
+  // two replication outcomes and their average, the replication value the
+  // interval above is formed from.
+  const pairsSec = el('div');
+  pairsSec.hidden = true;
+  pairsSec.appendChild(el('div', 'sub-hd', 'Antithetic pairs'));
+  const pairsLede = el('p', 'exp-note');
+  const pairsBox = el('div'), pairsLeg = el('div'), pairsCap = el('p', 'rv-cap');
+  const pairsCtrl = el('div', 'ctrl-row');
+  pairsCtrl.innerHTML = '<span class="ctrl-lbl" id="rp-pv-lbl">Show the replications</span>' +
+    '<span class="seg" role="group" aria-labelledby="rp-pv-lbl">' +
+      '<button type="button" class="seg-btn" data-pv="pairs" aria-pressed="true">As pairs</button>' +
+      '<button type="button" class="seg-btn" data-pv="order" aria-pressed="false">In run order</button>' +
+    '</span>';
+  pairsSec.append(pairsLede, pairsCtrl, pairsBox, pairsLeg, pairsCap);
+  pairsFig = makeFigure(pairsBox, { height: 240, narrowHeight: 240, margin: { t: 10, b: 42 }, ariaLabel: 'Each antithetic pair’s two replication outcomes and their average' });
+  exportButtons(pairsBox, pairsFig, 'antithetic-pairs');
+  res.appendChild(pairsSec);
   res.appendChild(qSec);
   res.appendChild(varSec);
 
@@ -38447,7 +38733,7 @@ export function render(rootEl) {
   planSec.appendChild(details('Half-width or power?', PLAN_WHY));
   root.appendChild(planSec);
 
-  els = { varSec, vTab, varLede, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
+  els = { pairsSec, pairsLede, pairsCtrl, pairsLeg, pairsCap, varSec, vTab, varLede, testCtrl, qSec, qHd, qTab, qNote, ctrl, tfBox, resHd, unitBox, warnBox, ovrBox, mainTab, npNote, checks, leg, cap, planSec,
           qHow: qHow.querySelector('#rp-q-how'), mu0Box: testCtrl.querySelector('#rp-mu0-box'), mu0Unit: testCtrl.querySelector('#rp-mu0-unit'), mu0On: testCtrl.querySelector('#rp-mu0-on'), mu0Pair: testCtrl.querySelector('#rp-mu0-pair'), qp: qSec.querySelector('#rp-qp'),
           sel: ctrl.querySelector('#rp-ds'), lvl: ctrl.querySelector('#rp-lvl'), tf: ctrl.querySelector('#rp-tf'),
           tgtBox: planSec.querySelector('#rp-tgt-box'), tgtUnit: planSec.querySelector('#rp-tgt-unit'),
@@ -38493,6 +38779,17 @@ export function render(rootEl) {
   if (typeof qp === 'number' && qp > 0 && qp < 1) extra.qp = qp;
   els.qp.value = String(extra.qp);
   spinner(els.qp, { min: 0.01, max: 0.99, step: 0.05, decimals: 2, onChange: v => { extra.qp = v; state.setPick(id, 'quantileP', v); draw(); } });
+  // The antithetic pairs drawn as pairs or in run order, a setting for the page.
+  if (state.getPick(id, 'pairsView') === 'order') extra.pairsView = 'order';
+  const syncPv = () => els.pairsCtrl.querySelectorAll('[data-pv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pv === extra.pairsView)));
+  syncPv();
+  els.pairsCtrl.querySelectorAll('[data-pv]').forEach(b => b.addEventListener('click', () => {
+    if (extra.pairsView === b.dataset.pv) return;
+    extra.pairsView = b.dataset.pv;
+    state.setPick(id, 'pairsView', extra.pairsView);
+    syncPv();
+    draw();
+  }));
   extra.test = state.getPick(id, 'testMu0') === true;
   els.mu0On.checked = extra.test;
   els.mu0On.addEventListener('change', () => { extra.test = els.mu0On.checked; state.setPick(id, 'testMu0', extra.test); draw(); });
@@ -39142,7 +39439,7 @@ function drawPlan() {
   const { recipeIn, ...result } = resultBase;
   const planIn = ctx ? { relative, rel: plan.rel, abs: relative ? null : plan.abs, delta, power: plan.power } : null;
   // Past the cap (pooled observations only) the scripts read the CSV file `files` names.
-  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { mu0: extra.test } })),
+  const regen = { tooBig: oneTooBig(recipeIn), build: () => oneRecipe(Object.assign({}, recipeIn, { level, title: result.title, provenance: prov, plan: planIn, view: { mu0: extra.test, pairsOrder: extra.pairsView === 'order' } })),
     files: [{ ds: recipeIn.ds, form: recipeIn.pooled ? 'observations' : 'replications' }] };
   state.setResult(id, Object.assign(result, { provenance: prov, tables, regen }));
 }
@@ -39177,7 +39474,105 @@ function overrideBlock(ds, on, oneRep) {
   return box;
 }
 
+/**
+ * The pairs of a dataset loaded as antithetic pair averages, one column per
+ * pair: the pair's first replication as a filled dot and its second as a
+ * hollow one, joined by a thin line, with the pair averages as a heavy line
+ * through them and, when the test is on and no transform is, the stated mean
+ * dashed. Hidden for any other dataset, and for one stored before the pairs'
+ * outcomes were kept.
+ */
+function drawPairs(d) {
+  const P = d && d.ds && d.ds.source.pairs;
+  const on = !!(P && Array.isArray(P.first) && P.first.length >= 2);
+  els.pairsSec.hidden = !on;
+  if (!on) return;
+  const a = P.first, b = P.second, n = a.length;
+  const avg = a.map((v, k) => (v + b[k]) / 2);
+  const ids = repIds(d.ds).map(String);
+  const mu0 = d.mu0 && (!d.tf || d.tf === 'none') ? d.mu0.value : null;
+  const st = pairStats(a, b);
+  // Two decimals, and 0 rather than −0 for a value that rounds to zero.
+  const two = v => { const x = Math.round(v * 100) / 100; return num(x === 0 ? 0 : x); };
+  els.pairsLede.innerHTML = 'The ' + intl(n) + ' replication values are pair averages, of replications 1 and 2, 3 and 4, and so on. ' +
+    'Correlation within the pairs: <strong>r = ' + esc(two(st.r)) + '</strong> (ideally r &lt; 0). Variance of the pair averages, (s₁² + s₂² + 2r s₁s₂)/4 = ' + esc(num(st.varPaired)) +
+    '; variance if the two replications of each pair were independent, (s₁² + s₂²)/4 = ' + esc(num(st.varIndependent)) +
+    '; antithetic:independent variance ratio is <strong>' + esc(two(st.ratio)) + '</strong> (ideally ratio &lt; 1). Independent pairs have a ratio of about 1, but anticorrelated pairs (r &lt; 0) have a ratio below 1. ' +
+    'A ratio above 1 means the antithetic pairing increased the variance relative to independent pairs.';
+  // As pairs, each pair is one column; in run order, each replication is its
+  // own column, the pair's two side by side, joined in sequence by a light
+  // line, with each pair average drawn between its two replications.
+  const order = extra.pairsView === 'order';
+  const ks = Array.from({ length: n }, (_, k) => k + 1);
+  const xa = order ? ks.map(k => 2 * k - 1) : ks, xb = order ? ks.map(k => 2 * k) : ks, xm = order ? ks.map(k => 2 * k - 0.5) : ks;
+  const cols = order ? 2 * n : n;
+  pairsFig.render(f => {
+    const sx = f.x([0.5, cols + 0.5]);
+    const sy = f.y(extent(a, b, mu0 != null ? [mu0] : null), { pad: 0.06, nice: true });
+    f.axes({ xInteger: true, xLabel: order ? 'Replication' : 'Pair', yLabel: outcomeAxis(d.ds, false, 'none') });
+    const cEst = tok('--est'), cTruth = tok('--truth'), cPair = tok('--pair'), cCard = tok('--card'), cText = tok('--text');
+    const spacing = f.iw / cols;
+    const r = Math.max(2.2, Math.min(f.narrow ? 4 : 4.5, spacing * (order ? 0.45 : 0.36)));
+    if (mu0 != null) {
+      svgEl('line', { x1: 0, x2: f.iw, y1: sy(mu0), y2: sy(mu0), stroke: cText, 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, f.inner);
+    }
+    const seqX = [], seqY = [];
+    if (order) {
+      for (let k = 0; k < n; k++) { seqX.push(xa[k], xb[k]); seqY.push(a[k], b[k]); }
+      svgEl('polyline', { points: seqX.map((x, i) => sx(x).toFixed(1) + ',' + sy(seqY[i]).toFixed(1)).join(' '), fill: 'none', stroke: cPair, 'stroke-width': 1.2,
+        'stroke-linejoin': 'round', class: 'm-pair-seq' }, f.inner);
+    } else {
+      // The link runs between the two dots' rims, and so it never shows
+      // through the hollow dot.
+      const gLink = svgEl('g', { class: 'm-pair-link' }, f.inner);
+      for (let k = 0; k < n; k++) {
+        const px = sx(k + 1), ya = sy(a[k]), yb = sy(b[k]);
+        if (Math.abs(ya - yb) > 2 * r + 2) {
+          const dir = yb > ya ? 1 : -1;
+          svgEl('line', { x1: px, x2: px, y1: ya + dir * (r + 1), y2: yb - dir * (r + 1), stroke: cPair, 'stroke-width': 1.5 }, gLink);
+        }
+      }
+    }
+    svgEl('polyline', { points: xm.map((x, k) => sx(x).toFixed(1) + ',' + sy(avg[k]).toFixed(1)).join(' '), fill: 'none', stroke: cTruth, 'stroke-width': 3,
+      'stroke-linejoin': 'round', 'stroke-linecap': 'round', class: 'm-pair-avg' }, f.inner);
+    const gB = svgEl('g', { class: 'm-pair-b' }, f.inner), gA = svgEl('g', { class: 'm-pair-a' }, f.inner);
+    for (let k = 0; k < n; k++) {
+      svgEl('circle', { cx: sx(xb[k]), cy: sy(b[k]), r, fill: cCard, stroke: cEst, 'stroke-width': 2 }, gB);
+      svgEl('circle', { cx: sx(xa[k]), cy: sy(a[k]), r, fill: cEst, stroke: cCard, 'stroke-width': 1 }, gA);
+    }
+    if (mu0 != null) f.series.push({ kind: 'hline', y: mu0, color: cText, dash: true, label: 'stated mean mu0' });
+    f.series.push(order
+      ? { kind: 'line', x: seqX, y: seqY, color: cPair, width: 1.2, label: 'replications in run order' }
+      : { kind: 'segments', x0: ks, x1: ks, y0: a.slice(), y1: b.slice(), color: cPair, label: 'pair' },
+    { kind: 'line', x: xm.slice(), y: avg, color: cTruth, width: 3, label: 'pair average' },
+    { kind: 'points', x: xb.slice(), y: b.slice(), color: cEst, hollow: true, label: 'second replication of the pair' },
+    { kind: 'points', x: xa.slice(), y: a.slice(), color: cEst, label: 'first replication of the pair' });
+    f.readout((dx, dy, px) => {
+      const c = Math.round(sx.invert(px));
+      if (c < 1 || c > cols || Math.abs(sx(c) - px) > Math.max(12, spacing / 2)) return null;
+      const k = order ? Math.ceil(c / 2) - 1 : c - 1;
+      const pair = 'pair ' + (k + 1) + (ids[k] ? ' (replications ' + ids[k].replace('-', ' and ') + ')' : '');
+      if (!order) return [pair, 'first ' + num(a[k]) + ', second ' + num(b[k]), 'average ' + num(avg[k])];
+      return ['replication ' + c + ', the ' + (c % 2 ? 'first' : 'second') + ' of ' + pair, 'outcome ' + num(c % 2 ? a[k] : b[k]), 'pair average ' + num(avg[k])];
+    });
+  });
+  const items = [
+    { swatch: 'dot', color: '--est', label: 'first replication of the pair' },
+    { swatch: 'hollow', color: '--est', label: 'second replication of the pair' }
+  ];
+  if (order) items.push({ swatch: 'thin', color: '--pair', label: 'replications in run order' });
+  items.push({ swatch: 'line', color: '--truth', label: 'pair average, the replication value analyzed' });
+  if (mu0 != null) items.push({ swatch: 'dash', color: '--text', label: 'stated mean μ₀' });
+  legend(els.pairsLeg, items, pairsFig);
+  els.pairsCap.textContent = order
+    ? 'Each replication in the order it was run, the first of each pair filled and the second hollow, joined in sequence by the thin line; the heavy line is each pair’s average, drawn between its two replications. ' +
+      'In antithetic pairs the thin line zigzags, a busy run followed by a quiet one, and the pair averages stay closer to the mean than the replications do.'
+    : 'Each column is one pair: its first replication filled, its second hollow, and the line joining them the gap between the two. ' +
+      'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run with a quiet one, and so the heavy line of pair averages varies less than the dots do.';
+}
+
 function drawFigure(d) {
+  drawPairs(d);
   const level = state.settings.level;
   const cEst = '--est', cTruth = '--truth';
   if (!d || !d.values.length) {
@@ -51946,7 +52341,7 @@ function restoreDataset(o) {
       file: isStr(src.file) ? src.file : '',
       format: isStr(src.format) ? src.format : '',
       notes: Array.isArray(src.notes) ? src.notes.filter(isStr) : [],
-      pairs: src.pairs === true
+      pairs: src.pairs
     },
     issues,
     derivedFrom: restoreDerived(o.derivedFrom),

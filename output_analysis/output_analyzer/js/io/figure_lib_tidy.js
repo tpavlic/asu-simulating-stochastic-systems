@@ -254,25 +254,50 @@ fig_intervals <- function(mid, lo, hi, labels, xlab, title, ref = NA, flagged = 
 `;
 
 FIG_TIDY.pairsByRep = `
-# One column per matched pair: design A as a filled dot, design B as a hollow dot, joined by a
-# dashed segment.
-fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication") {
+# One column per matched pair: the first of each pair (design A) as a filled dot, the second
+# (design B) as a hollow dot, joined by a dashed segment; avg_line adds the pair averages as a
+# heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each replication has
+# its own column, the pair's two side by side and all of them joined in run order by a light
+# line, with each pair average between its two; ids then label the 2n columns.
+fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
+                             labels = c("A", "B"), avg_line = FALSE, ylab = "Replication outcome",
+                             ref = NA, order = FALSE) {
   n <- length(a)
-  if (n == 0) return(fig_empty(title, xlab, "Replication outcome"))
-  d <- tibble(k = seq_len(n), a = as.numeric(a), b = as.numeric(b))
+  if (n == 0) return(fig_empty(title, xlab, ylab))
+  k <- seq_len(n)
+  d <- tibble(xa = if (order) 2 * k - 1 else k, xb = if (order) 2 * k else k,
+              a = as.numeric(a), b = as.numeric(b))
+  cols <- if (order) 2 * n else n
   both <- filter(d, is.finite(a), is.finite(b))
-  long <- bind_rows(tibble(k = d$k, y = d$a, design = "A"), tibble(k = d$k, y = d$b, design = "B")) %>%
+  long <- bind_rows(tibble(x = d$xa, y = d$a, design = labels[1]), tibble(x = d$xb, y = d$b, design = labels[2])) %>%
+    mutate(design = factor(design, levels = labels)) %>%
     filter(is.finite(y))
-  keep <- seq(1, n, by = max(1, ceiling(n / 20)))
-  p <- ggplot() +
-    geom_segment(data = both, aes(x = k, xend = k, y = a, yend = b), linetype = "dashed",
-                 color = FIG_MUTED) +
-    geom_point(data = long, aes(x = k, y = y, shape = design, fill = design), color = FIG_EST,
+  keep <- seq(1, cols, by = max(1, ceiling(cols / 20)))
+  shown_lines <- c(if (order) "run order", if (avg_line) "pair average")
+  p <- ggplot()
+  if (isTRUE(is.finite(ref))) p <- p + geom_hline(yintercept = ref, linetype = "dashed", color = FIG_MUTED)
+  if (order) {
+    run <- tibble(x = as.vector(rbind(d$xa, d$xb)), y = as.vector(rbind(d$a, d$b))) %>% filter(is.finite(y))
+    p <- p + geom_line(data = run, aes(x = x, y = y, color = "run order"), linewidth = 0.4)
+  } else {
+    p <- p + geom_segment(data = both, aes(x = xa, xend = xa, y = a, yend = b), linetype = "dashed",
+                          color = FIG_MUTED)
+  }
+  if (avg_line) {
+    p <- p + geom_line(data = mutate(both, m = (a + b) / 2, xm = (xa + xb) / 2),
+                       aes(x = xm, y = m, color = "pair average"), linewidth = 1.2)
+  }
+  if (length(shown_lines)) {
+    p <- p + scale_color_manual(values = c("run order" = FIG_MUTED, "pair average" = FIG_TRUTH)[shown_lines],
+                                breaks = shown_lines, name = NULL)
+  }
+  p <- p +
+    geom_point(data = long, aes(x = x, y = y, shape = design, fill = design), color = FIG_EST,
                size = 2.6, stroke = 0.8) +
-    scale_shape_manual(values = c(A = 21, B = 21)) +
-    scale_fill_manual(values = c(A = FIG_EST, B = "white")) +
-    scale_x_continuous(breaks = keep, labels = as.character(ids)[keep]) +
-    labs(x = xlab, y = "Replication outcome", title = title, shape = NULL, fill = NULL) +
+    scale_shape_manual(values = setNames(c(21, 21), labels)) +
+    scale_fill_manual(values = setNames(c(FIG_EST, "white"), labels)) +
+    scale_x_continuous(breaks = keep, labels = rep_len(as.character(ids), cols)[keep]) +
+    labs(x = xlab, y = ylab, title = title, shape = NULL, fill = NULL) +
     fig_theme()
   print(p)
   invisible(p)

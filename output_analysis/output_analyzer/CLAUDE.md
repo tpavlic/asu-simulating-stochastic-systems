@@ -24,8 +24,10 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   (`pairAverages` in `js/data/model.js`: each replication's outcome is computed first, as on every
   page, and outcomes 1 and 2, 3 and 4, … are averaged into one replication value each, with ids
   such as `1-2`; no observation is paired, none is loaded, and the dataset takes its name with
-  " (pair averages)", with `source.pairs` set and a note giving the correlation within the pairs
-  and the variance ratio that the dialog's preview also shows; numbered replications must come as
+  " (pair averages)", with `source.pairs` holding each pair's two outcomes as `{ first, second }`
+  (a session stored before they were kept restores `true`, which marks the dataset but draws no
+  pairs) and a note giving the correlation within the pairs and the variance ratio
+  (`pairStats`) that the dialog's preview also shows; numbered replications must come as
   1 and 2, 3 and 4, …, so that a missing one never shifts the pairs, and other ids pair by
   position; refused for an odd count, fewer than four, a replication with no outcome, or numbered
   replications that are not whole pairs in order); every rejected row listed with its line number; and the binary `.dat` files Arena
@@ -89,7 +91,15 @@ mobile, commit messages) are in the root `CLAUDE.md`.
   verdict on its own line; the signed-rank test at μ₀ under the rank procedure); off, the page, its
   export tables, the Report page, and the scripts carry no test, and the provenance says the stated
   mean is "none", as Several Systems' benchmark does when it is off; the card's sub-sections are headed by `.sub-hd`, the within-card
-  heading style Summary and Plots' sub-sections share; and in the same card a "Confidence interval on a quantile" sub-section
+  heading style Summary and Plots' sub-sections share; for a dataset loaded as antithetic pair
+  averages, an "Antithetic pairs" sub-section after the interval's notes (`drawPairs`) gives r,
+  the variance of the pair averages beside (s₁² + s₂²)/4, the variance independent pairs would
+  give, and their ratio, and draws one column per pair, its first replication filled and its
+  second hollow, joined, with the pair averages as a heavy line and μ₀ dashed when the test is on
+  and no transform is, or under a "Show the replications" switch (`pairsView`, a page setting)
+  each replication in run order in its own column, all joined in sequence by a light line and
+  each pair average drawn between its two, which the scripts draw through `fig_pairs_by_rep`
+  with `avg_line` and, in run order, `order`; and in the same card a "Confidence interval on a quantile" sub-section
   (a one-row table: the point estimate Y₍⌈pR⌉₎, the distribution-free
   interval from two order statistics with α/2 of the binomial probability in each tail, the
   ranks SciPy's `quantile_test` returns, shown in brackets beside the ranks [r, s] and the
@@ -377,14 +387,20 @@ mobile, commit messages) are in the root `CLAUDE.md`.
      for the customers-served, versus-control, and six-designs examples the same queue with room
      for 4, 4, and 8 customers in all, and half of six-designs' designs serving in Erlang times;
      for the two 1-vs-2-servers examples, a first-in first-out queue with two half-speed servers
-     as well; the muffin-oven example's rows are written into the generator as `OVEN_RUNS`, the runs of a
+     as well; for the antithetic-pairs example, the server's busy fraction of each day, the
+     second day of an antithetic pair reading the first's streams through 1 − u; the muffin-oven example's rows are written into the generator as `OVEN_RUNS`, the runs of a
      hand-simulation exercise's ten demand streams, which stay unpublished) and must match
      `data/*` byte for byte; `test/examples.test.mjs` regenerates and compares, so
      change the generator, never the generated files. The examples run on common random numbers
      (`two-crn`, `servers-crn`, `four-crn`, `muffin-oven`) head their replication column `block`
      and set `blocks: true` in their mappings, so that they open paired whether loaded directly or through
-     Assign its columns myself, and no other example does; the test checks both. The test also
-     pins what the descriptions of `service-level`, `utilization`, `muffin-oven`, the two
+     Assign its columns myself, and no other example does; the test checks both. The one run in
+     pairs (`antithetic-pairs`, an antithetic and an independent set told apart by a `pairing`
+     column, which share the first day of every pair and differ only in its partner) sets `pairs: true` on the entry, which loads both sets as pair averages through Load
+     and ticks the box through Assign its columns myself. The test also pins what the
+     descriptions of `service-level`, `utilization`, `muffin-oven`, `antithetic-pairs` (r near
+     −0.64 and a variance ratio near 0.36 for the antithetic set, against near 0 and near 1 for
+     the independent set, whose interval is the wider), the two
      1-vs-2-servers examples (the independent pair's Welch interval includes 0, the paired one's
      excludes it with every difference positive, and read as independent it includes 0 again),
      `customers-served`, `versus-control`, `four-designs`, and `six-designs` claim about their analyses

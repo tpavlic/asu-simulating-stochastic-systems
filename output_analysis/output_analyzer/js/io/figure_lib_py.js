@@ -256,30 +256,47 @@ def fig_intervals(mid, lo, hi, labels, xlab, title, ref=np.nan, flagged=None, mu
 `;
 
 FIG_PY.pairsByRep = `
-def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replication"):
-    """Each matched pair as a filled dot (A) and a hollow dot (B) joined by a dashed segment."""
+def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replication",
+                     labels=("A", "B"), avg_line=False, ylab="Replication outcome", ref=None,
+                     order=False):
+    """Each matched pair as a filled dot (A) and a hollow dot (B) joined by a dashed segment;
+    avg_line adds the pair averages as a heavy line, and a finite ref a dashed horizontal line.
+    With order=True, each replication has its own column, the pair's two side by side and all
+    of them joined in run order by a light line, with each pair average between its two; ids
+    then label the 2n columns."""
     import matplotlib.pyplot as plt
     a = np.asarray(a, dtype=float).ravel()
     b = np.asarray(b, dtype=float).ravel()
     n = min(a.size, b.size)
     fig, ax = plt.subplots(figsize=(7.0, 4.0))
     if n == 0:
-        fig_empty(ax, title, xlab, "Replication outcome")
+        fig_empty(ax, title, xlab, ylab)
         fig.tight_layout()
         return fig
     a, b = a[:n], b[:n]
-    x = np.arange(1, n + 1)
-    ax.vlines(x, np.fmin(a, b), np.fmax(a, b), color=FIG_MUTED, linestyle="--", linewidth=1)
-    ax.plot(x, a, "o", color=FIG_EST, markersize=6, label="A")
-    ax.plot(x, b, "o", color=FIG_EST, markerfacecolor="white", markersize=6, label="B")
-    step = int(np.ceil(n / 20.0))
-    shown = list(range(0, n, step))
-    names = fig_labels(ids, n)
-    ax.set_xticks([x[k] for k in shown])
-    ax.set_xticklabels([names[k] for k in shown], rotation=45 if step == 1 and n > 10 else 0)
-    ax.set_xlim(0.4, n + 0.6)
+    k = np.arange(1, n + 1)
+    xa, xb, xm = (2 * k - 1, 2 * k, 2 * k - 0.5) if order else (k, k, k)
+    cols = 2 * n if order else n
+    if ref is not None and np.isfinite(ref):
+        ax.axhline(ref, color=FIG_MUTED, linestyle="--", linewidth=1.2)
+    if order:
+        ax.plot(np.column_stack([xa, xb]).ravel(), np.column_stack([a, b]).ravel(), color=FIG_MUTED,
+                linewidth=1, label="run order")
+    else:
+        ax.vlines(xa, np.fmin(a, b), np.fmax(a, b), color=FIG_MUTED, linestyle="--", linewidth=1)
+    if avg_line:
+        ax.plot(xm, (a + b) / 2, color=FIG_TRUTH, linewidth=3, label="pair average")
+    ax.plot(xa, a, "o", color=FIG_EST, markersize=6, label=labels[0])
+    ax.plot(xb, b, "o", color=FIG_EST, markerfacecolor="white", markersize=6, label=labels[1])
+    x = np.arange(1, cols + 1)
+    step = int(np.ceil(cols / 20.0))
+    shown = list(range(0, cols, step))
+    names = fig_labels(ids, cols)
+    ax.set_xticks([x[j] for j in shown])
+    ax.set_xticklabels([names[j] for j in shown], rotation=45 if step == 1 and cols > 10 else 0)
+    ax.set_xlim(0.4, cols + 0.6)
     ax.set_xlabel(xlab)
-    ax.set_ylabel("Replication outcome")
+    ax.set_ylabel(ylab)
     ax.set_title(title)
     ax.legend(loc="best")
     fig.tight_layout()

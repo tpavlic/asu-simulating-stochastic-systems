@@ -3,7 +3,8 @@
 /**
  * Bundled example datasets. `text` is the file's contents as the importer reads it, and
  * `mapping` is the column assignment that loads it without a dialog (column indices, 0-based).
- * @type {{id: string, title: string, file: string, kind: 'tally'|'time'|'reps', format: 'minus1'|'columns', description: string, text: string, mapping: object}[]}
+ * `pairs` loads the replications as antithetic pair averages, as the import dialog's box does.
+ * @type {{id: string, title: string, file: string, kind: 'tally'|'time'|'reps', format: 'minus1'|'columns', pairs?: boolean, description: string, text: string, mapping: object}[]}
  */
 export const EXAMPLES = [
   {
@@ -35,6 +36,118 @@ export const EXAMPLES = [
 18,3.1763,11.7473,461
 19,2.8468,12.2701,487
 20,1.8957,7.0777,478
+`
+  },
+  {
+    id: "antithetic-pairs",
+    title: "Antithetic variates against independent pairs (utilization, 25 pairs each)",
+    file: "antithetic_pairs.csv",
+    kind: "reps",
+    format: "columns",
+    pairs: true,
+    description: "The fraction of an 8-hour day that the server of a single-server queue is busy, with exponential interarrival times (mean 1 minute) and service times (mean 0.8 minute), run twice, as two datasets. The antithetic set is 25 antithetic pairs: each odd day on fresh random numbers and the day after it on their complements, 1 − U for every interarrival and service draw, and so a busy day is paired with a quiet one. The independent set runs the same first day of each pair, partnered with a day on fresh random numbers instead of the complements, and so the partner is the only difference between the two sets. Each loads as its 25 pair averages, and One System draws the pairs under the interval: switching between the two sets moves only the hollow dots and the pair averages. In the antithetic set the correlation within the pairs is about −0.64 and the variance ratio about 0.36; in the independent set they are about 0 and 1, and its interval is the wider.",
+    mapping: {"kind":"reps","value":2,"time":null,"rep":1,"scenario":0,"name":"Utilization","endTime":null,"blocks":false},
+    text: `pairing,replication,utilization
+antithetic,1,0.8619
+antithetic,2,0.6956
+antithetic,3,0.6815
+antithetic,4,0.8094
+antithetic,5,0.7883
+antithetic,6,0.7973
+antithetic,7,0.83
+antithetic,8,0.7806
+antithetic,9,0.7597
+antithetic,10,0.8308
+antithetic,11,0.7794
+antithetic,12,0.8413
+antithetic,13,0.7632
+antithetic,14,0.8686
+antithetic,15,0.8319
+antithetic,16,0.7057
+antithetic,17,0.8533
+antithetic,18,0.7876
+antithetic,19,0.8133
+antithetic,20,0.7482
+antithetic,21,0.7367
+antithetic,22,0.8369
+antithetic,23,0.8302
+antithetic,24,0.779
+antithetic,25,0.7579
+antithetic,26,0.8115
+antithetic,27,0.7957
+antithetic,28,0.7392
+antithetic,29,0.7532
+antithetic,30,0.9406
+antithetic,31,0.777
+antithetic,32,0.7942
+antithetic,33,0.972
+antithetic,34,0.7193
+antithetic,35,0.7678
+antithetic,36,0.8179
+antithetic,37,0.7807
+antithetic,38,0.757
+antithetic,39,0.8309
+antithetic,40,0.8136
+antithetic,41,0.8567
+antithetic,42,0.7464
+antithetic,43,0.7423
+antithetic,44,0.809
+antithetic,45,0.7984
+antithetic,46,0.7358
+antithetic,47,0.9061
+antithetic,48,0.6892
+antithetic,49,0.7972
+antithetic,50,0.8604
+independent,1,0.8619
+independent,2,0.7057
+independent,3,0.6815
+independent,4,0.8342
+independent,5,0.7883
+independent,6,0.8043
+independent,7,0.83
+independent,8,0.7971
+independent,9,0.7597
+independent,10,0.7784
+independent,11,0.7794
+independent,12,0.7822
+independent,13,0.7632
+independent,14,0.8476
+independent,15,0.8319
+independent,16,0.8368
+independent,17,0.8533
+independent,18,0.7234
+independent,19,0.8133
+independent,20,0.789
+independent,21,0.7367
+independent,22,0.7749
+independent,23,0.8302
+independent,24,0.7992
+independent,25,0.7579
+independent,26,0.729
+independent,27,0.7957
+independent,28,0.8106
+independent,29,0.7532
+independent,30,0.8446
+independent,31,0.777
+independent,32,0.7707
+independent,33,0.972
+independent,34,0.8577
+independent,35,0.7678
+independent,36,0.7295
+independent,37,0.7807
+independent,38,0.8129
+independent,39,0.8309
+independent,40,0.7374
+independent,41,0.8567
+independent,42,0.8514
+independent,43,0.7423
+independent,44,0.8353
+independent,45,0.7984
+independent,46,0.8868
+independent,47,0.9061
+independent,48,0.7942
+independent,49,0.7972
+independent,50,0.7702
 `
   },
   {

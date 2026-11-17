@@ -197,7 +197,7 @@ function restoreDataset(o) {
       file: isStr(src.file) ? src.file : '',
       format: isStr(src.format) ? src.format : '',
       notes: Array.isArray(src.notes) ? src.notes.filter(isStr) : [],
-      pairs: src.pairs === true
+      pairs: src.pairs
     },
     issues,
     derivedFrom: restoreDerived(o.derivedFrom),

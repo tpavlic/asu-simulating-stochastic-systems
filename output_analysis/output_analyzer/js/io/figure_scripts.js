@@ -24,8 +24,10 @@
 //     right, brackets, ok): a forest plot, row 1 at the top; flagged rows red
 //     and dashed, muted rows gray, ok rows green; text at each row's right,
 //     and a bracket joining each pair of rows given.
-//   fig_pairs_by_rep(a, b, ids; xlab, title) and
-//   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs.
+//   fig_pairs_by_rep(a, b, ids; xlab, title, labels, avg_line, ylab, ref) and
+//   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs; avg_line
+//     draws the pair averages as a heavy line, ref a dashed line, and order
+//     each replication in its own column, joined in run order.
 //   fig_hist(x, edges, xlab, title), fig_ecdf(x, xlab, title),
 //   fig_box(x, xlab, title), fig_qq(x, ylab, title; xlab).
 //   fig_value_edges(x): bin edges giving one bin per value, on the
@@ -130,11 +132,23 @@ function oneFigures(r, L) {
   }
   if (F.mu0) opts.ref = 'mu0';
   const what = (o.np ? 'the Wilcoxon signed-rank interval on the pseudo-median' : 'the t interval on the mean');
-  return {
-    notes: [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line; the interval is drawn red and dashed when it excludes mu0, which is when the test rejects it.' : '.')],
-    calls: call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts),
-    fig: ['strips']
-  };
+  const notes = [(r.data.pooled ? 'The pooled observations' : 'The replication outcomes') + ' as dots, with their mean' + (o.interval ? ' and ' + what + ' under them' : '') + (F.mu0 ? ', and the stated mean mu0 as a dashed line; the interval is drawn red and dashed when it excludes mu0, which is when the test rejects it.' : '.')];
+  const calls = call(L, 'fig_strips', [listOf(L, ['x']), strsOf(L, [F.label]), L.str(F.xlab), L.str(F.title)], opts);
+  const fig = ['strips'];
+  // A dataset loaded as antithetic pair averages: each pair's two outcomes,
+  // which the data above do not hold, and their average, the outcome analyzed.
+  if (F.pairs) {
+    const n = F.pairs.first.length, order = !!F.pairs.order;
+    calls.push(L.assign('pair_first', L.vec(F.pairs.first)), L.assign('pair_second', L.vec(F.pairs.second)),
+      ...call(L, 'fig_pairs_by_rep', ['pair_first', 'pair_second', L.vec(Array.from({ length: order ? 2 * n : n }, (_, k) => k + 1))],
+        { xlab: L.str(order ? 'Replication' : 'Pair'), title: L.str('Antithetic pairs'), labels: strsOf(L, ['first replication of the pair', 'second replication of the pair']),
+          avg_line: L.bool(true), ylab: L.str(F.pairs.ylab), ref: F.mu0 && (!r.transform || r.transform === 'none') ? 'mu0' : undefined,
+          order: order ? L.bool(true) : undefined }));
+    notes.push('The antithetic pairs, the first replication of each filled and the second hollow' + (order ? ', in run order and joined in sequence,' : '') +
+      ' with the pair averages as a heavy line' + (F.mu0 && (!r.transform || r.transform === 'none') ? ' and mu0 dashed.' : '.'));
+    fig.push('pairsByRep');
+  }
+  return { notes, calls, fig };
 }
 
 // ── Two Systems ──────────────────────────────────────────────────────────

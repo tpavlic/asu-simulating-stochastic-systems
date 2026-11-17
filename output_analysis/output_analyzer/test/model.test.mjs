@@ -219,7 +219,7 @@ test('pairAverages averages replications 1 and 2, 3 and 4, and so on', () => {
   // It loads in place of its source, under a name of its own, and says what it is.
   assert.equal(res.dataset.name, 'av (pair averages)');
   assert.equal(res.dataset.derivedFrom, null);
-  assert.equal(res.dataset.source.pairs, true);
+  assert.deepEqual(res.dataset.source.pairs, { first: [1, 2, 4, 3], second: [3, 2, 0, 1] });
   assert.equal(res.dataset.source.file, 'av.csv');
   assert.deepEqual(res.dataset.source.notes, ['Replications 1 to 8 of av were run in antithetic pairs and loaded as 4 pair averages (1 and 2, 3 and 4, …): correlation within the pairs r = -1, variance ratio 0, the sample variance of the averages over what averages of two independent replications would have.']);
   assert.equal(res.dataset.loadId, 'L1');
@@ -244,6 +244,17 @@ test('pairAverages works on replication means, and its ratio is the variance of 
   near(res.stats.r, 3 / Math.sqrt((114 / 9) * 2));
   assert.equal(res.dataset.loadId, null);
   assert.equal(res.dataset.blocks, false);
+});
+
+test('makeDataset keeps the pairs of antithetic pair averages, or true for a session stored without them', () => {
+  const src = pairs => makeDataset({ name: 'p', kind: 'reps', reps: [{ id: '1-2', v: [2] }], source: { pairs } }).source.pairs;
+  assert.deepEqual(src({ first: [1, 3], second: [3, 1] }), { first: [1, 3], second: [3, 1] });
+  assert.equal(src(true), true);
+  // Pairs that cannot be drawn still mark the dataset as pair averages; anything else marks nothing.
+  assert.equal(src({ first: [1, 'x'], second: [3, 1] }), true);
+  assert.equal(src({ first: [1], second: [3, 1] }), true);
+  assert.equal(src(false), undefined);
+  assert.equal(src(undefined), undefined);
 });
 
 test('pairAverages refuses an odd count, fewer than four, or a replication with no outcome', () => {

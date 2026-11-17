@@ -212,7 +212,7 @@ export function render(root) {
   // missing from every group (a new one, say) is listed at the end under no
   // label rather than dropped.
   const groups = [
-    { label: 'One System', ids: ['queue-reps'] },
+    { label: 'One System', ids: ['queue-reps', 'antithetic-pairs'] },
     { label: 'Two Systems', ids: ['two-independent', 'two-crn', 'servers-independent', 'servers-crn', 'muffin-oven'] },
     { label: 'Several Systems', ids: ['customers-served', 'versus-control', 'four-designs', 'four-crn', 'six-designs', 'service-level'] },
     { label: 'Steady State and within-run data', ids: ['transient', 'steady-long', 'queue-length', 'utilization'] }
@@ -231,7 +231,7 @@ export function render(root) {
   els.exLoad.addEventListener('click', () => loadExample(els.ex.value));
   els.exMap.addEventListener('click', () => {
     const ex = EXAMPLES.find(x => x.id === els.ex.value);
-    if (ex) enqueue(ex.file, ex.text, ex.mapping && ex.mapping.name, ex.kind, ex.mapping && ex.mapping.endTime);
+    if (ex) enqueue(ex.file, ex.text, ex.mapping && ex.mapping.name, ex.kind, ex.mapping && ex.mapping.endTime, !!ex.pairs);
   });
 
   state.on('datasets', () => { if (visible()) renderList(); });
@@ -306,9 +306,9 @@ function enqueueArena(fileName, src) {
 }
 
 // Queues one text for the mapping dialog and shows it when nothing else is
-// waiting.
-function enqueue(fileName, text, displayName, kind, endTime) {
-  queue.push({ fileName, text, displayName, kind, endTime });
+// waiting; `pairs` ticks the antithetic-pairs box, as for an example run in pairs.
+function enqueue(fileName, text, displayName, kind, endTime, pairs = false) {
+  queue.push({ fileName, text, displayName, kind, endTime, pairs });
   if (!pending) nextPending();
   else updateWaiting();
 }
@@ -356,7 +356,7 @@ function nextPending() {
       name, endTime: null, blocks: !!s.blocks
     },
     endText: it.endTime != null ? String(it.endTime) : '',
-    pairs: false,
+    pairs: !!it.pairs,
     wide: false,
     wideCols: null
   };
@@ -374,7 +374,9 @@ function loadExample(exId) {
     const res = buildDatasets(sn, ex.mapping);
     if (!res.datasets.length) throw new Error('The example produced no datasets.');
     for (const ds of res.datasets) ds.source.file = ex.file;
-    const { added, skipped } = addNew(res.datasets);
+    // An example run in antithetic pairs loads as its pair averages, as the
+    // dialog's box would load it.
+    const { added, skipped } = addNew(ex.pairs ? averagePairs(res.datasets).datasets : res.datasets);
     lastImport = {
       what: 'the example “' + ex.title + '”',
       datasets: added,
