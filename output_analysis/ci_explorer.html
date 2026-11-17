@@ -2176,11 +2176,22 @@ function histWindow(lists) {
   const span = (hi - lo) || Math.abs(hi) * 0.1 || 1;
   return { lo: lo - span * 0.1, hi: hi + span * 0.1 };
 }
-function fmtTick(v, win) {
-  // Tab ⑥ plots tail probabilities near 1e-7, where fixed decimals are all zeros.
-  if (win < 1e-4) return v.toExponential(1);
-  const prec = win < 0.002 ? 6 : win < 0.02 ? 5 : win < 0.2 ? 4 : win < 2 ? 3 : 2;
-  return v.toFixed(prec);
+// Labels for a set of niceTicks ticks, at one precision for all of them. Tab ⑥ plots
+// tail probabilities near 1e-7, where fixed decimals are all zeros, and so a small
+// axis switches to exponents, with the fewest mantissa digits that show every tick
+// exactly (1e-7, 2e-7 rather than 1.0e-7, 2.0e-7), and zero is a bare 0 rather
+// than 0e+0. Otherwise the step sets the decimals.
+function fmtTicks(ticks) {
+  if (!ticks.length) return [];
+  const step = ticks.length > 1 ? ticks[1] - ticks[0] : 0;
+  const top = Math.max.apply(null, ticks.map(Math.abs));
+  if (top > 0 && (top < 1e-4 || (step > 0 && step < 1e-6))) {
+    let d = 0;
+    while (d < 3 && ticks.some(v => v !== 0 && Math.abs(Number(v.toExponential(d)) - v) > Math.abs(v) * 1e-6)) d++;
+    return ticks.map(v => v === 0 ? '0' : v.toExponential(d));
+  }
+  const dec = step > 0 ? stepDecimals(step) : 2;
+  return ticks.map(v => v.toFixed(dec));
 }
 // Breaks a legend label at spaces into lines of at most `max` characters (a longer word keeps its own line).
 function histWrapLabel(label, max) {
@@ -2252,13 +2263,14 @@ function histPlot(svgEl, containerEl, runs, opts) {
   const xC = i => pL + (i + 0.5) * colW;
 
   let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
-  // Y axis with five ticks, precision from the window rather than the magnitude.
+  // Y axis with round-number ticks, which include 0 whenever the window spans it.
   h += `<line x1="${pL}" y1="${pT}" x2="${pL}" y2="${pT + cH}" stroke="#ccc" stroke-width="1"/>`;
-  for (let i = 0; i <= 4; i++) {
-    const v = yMin + i * (yMax - yMin) / 4, ty = yP(v);
+  const yTicks = niceTicks(yMin, yMax), yLbl = fmtTicks(yTicks);
+  yTicks.forEach((v, i) => {
+    const ty = yP(v);
     h += `<line x1="${pL - 4}" y1="${ty}" x2="${pL}" y2="${ty}" stroke="#bbb" stroke-width="1"/>`;
-    h += `<text x="${pL - 7}" y="${ty + 4}" text-anchor="end" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${fmtTick(v, yMax - yMin)}</text>`;
-  }
+    h += `<text x="${pL - 7}" y="${ty + 4}" text-anchor="end" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${yLbl[i]}</text>`;
+  });
   const yLX = 13, yLY = pT + cH / 2;
   h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">${opts.yLabel}</text>`;
   h += `<line x1="${pL}" y1="${pT + cH}" x2="${pL + cW}" y2="${pT + cH}" stroke="#ccc" stroke-width="1"/>`;
@@ -2559,8 +2571,11 @@ function niceTicks(lo, hi, want) {
   const mag = Math.pow(10, Math.floor(Math.log10(raw)));
   let step = mag;
   [1, 2, 2.5, 5, 10].some(k => { if (raw <= k * mag) { step = k * mag; return true; } return false; });
-  const t = [];
-  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) t.push(Math.abs(v) < 1e-9 ? 0 : v);
+  // Integer multiples of the step, with the slack scaled to the step: a running sum
+  // and an absolute 1e-9 slack both break down on an axis of tail probabilities
+  // near 1e-7, where the step itself is about that small.
+  const t = [], k0 = Math.ceil(lo / step - 1e-9), k1 = Math.floor(hi / step + 1e-9);
+  for (let k = k0; k <= k1; k++) t.push(k === 0 ? 0 : k * step);
   return t;
 }
 // The fewest decimals that represent `step` exactly (up to 1e-9): a step of
