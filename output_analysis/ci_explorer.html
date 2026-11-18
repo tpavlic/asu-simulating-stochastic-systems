@@ -1070,7 +1070,7 @@ svg.pi-wsv { display: block; width: 100%; height: auto; touch-action: pan-y; cur
           <button type="button" class="seg-btn" id="av-seq-pairs" aria-pressed="false" onclick="avSeqView('pairs')">As pairs</button>
         </span>
       </div>
-      <svg class="fig" id="av-seq" role="img" aria-label="The 2n outputs of one run, in the order drawn and joined in sequence or grouped as pairs, with the pair means as a heavy line, the true mean dashed, and a strip at the right showing the shown arm's own rug of pair means beside its confidence interval for E[h]; the current arm (independent or antithetic) follows the figure above's own toggle, on one fixed scale"></svg>
+      <svg class="fig" id="av-seq" role="img" aria-label="The 2n outputs of one run, in the order drawn or grouped as pairs, each pair's two joined, with the pair means as a heavy line, the true mean dashed, and a strip at the right showing the shown arm's own rug of pair means beside its confidence interval for E[h]; the current arm (independent or antithetic) follows the figure above's own toggle, on one fixed scale"></svg>
       <div class="cv-leg" id="av-seq-leg"></div>
       <div class="fig-note" id="av-seq-note"></div>
     </div>
@@ -4883,8 +4883,7 @@ function avSeqLegendHtml(mode, view) {
   const rugLabel = mode === 'av' ? 'z (antithetic)' : 'w (independent)';
   return `<span style="color:${C.est}"><span class="lg-s">●</span>first of a pair</span>`
     + `<span style="color:${C.est}"><span class="lg-s">○</span>second</span>`
-    + (view === 'pairs' ? `<span style="color:${C.muted}"><span class="lg-s" style="color:${C.pair}">|</span>joins a pair</span>`
-      : `<span style="color:${C.muted}"><span class="lg-s" style="color:${C.pair}">—</span>outputs in draw order</span>`)
+    + `<span style="color:${C.muted}"><span class="lg-s" style="color:${C.pair}">${view === 'pairs' ? '|' : '/'}</span>joins a pair</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">━</span>pair means</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">‒</span>pair means ${rugLabel} (strip rug)</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">┄</span>E[h]</span>`
@@ -4949,21 +4948,16 @@ function drawAvSeq(run, p) {
   // the interval's own mean dot outside the clip so it stays visible even when
   // its bar clips (the same rule, generalized). N of the drawn dots beyond the
   // scale is also reported in this panel's own note, unlike drawAvFig's.
-  // In draw order, each output has its own column and a light line joins them
-  // all in sequence; as pairs, a pair's two outputs share a column, joined. The
-  // pair means are a heavy line either way, between a pair's two outputs in
-  // draw order and through its column as pairs.
+  // In draw order, each output has its own column; as pairs, a pair's two
+  // outputs share a column. Either way a light line joins a pair's two outputs,
+  // and consecutive pairs are not joined, because nothing ties one pair to the
+  // next. The pair means are a heavy line, between a pair's two outputs in draw
+  // order and through its column as pairs.
   const xOf = i => (view === 'pairs' ? xP(Math.floor(i / 2) + 1) : xP(i + 1)); // i is the 0-indexed output
   const xMean = j => (view === 'pairs' ? xP(j + 1) : xP(2 * j + 1.5));
   let hClip = '';
-  if (view === 'pairs') {
-    for (let j = 0; j < drawCount / 2; j++) {
-      hClip += `<line x1="${xP(j + 1)}" y1="${yP(seq[2 * j])}" x2="${xP(j + 1)}" y2="${yP(seq[2 * j + 1])}" stroke="${C.pair}" stroke-width="1.2"/>`;
-    }
-  } else {
-    let seqPts = '';
-    for (let i = 0; i < drawCount; i++) seqPts += (i ? 'L' : 'M') + xP(i + 1).toFixed(1) + ',' + yP(seq[i]).toFixed(1);
-    hClip += `<path d="${seqPts}" fill="none" stroke="${C.pair}" stroke-width="1" stroke-linejoin="round"/>`;
+  for (let j = 0; j < drawCount / 2; j++) {
+    hClip += `<line x1="${xOf(2 * j)}" y1="${yP(seq[2 * j])}" x2="${xOf(2 * j + 1)}" y2="${yP(seq[2 * j + 1])}" stroke="${C.pair}" stroke-width="1.2" stroke-linecap="round"/>`;
   }
   let pmPts = '';
   for (let j = 0; j < drawCount / 2; j++) {
