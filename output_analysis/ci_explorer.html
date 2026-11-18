@@ -929,7 +929,7 @@ svg.pi-wsv { display: block; width: 100%; height: auto; touch-action: pan-y; cur
         <div class="cv-leg">
           <span style="color:var(--est)"><span class="lg-s">●</span>system 1 / input 1</span>
           <span style="color:var(--est)"><span class="lg-s">○</span>system 2 / input 2</span>
-          <span style="color:var(--pair)"><span class="lg-s">—</span>joins a pair (same replication, bottom row only)</span>
+          <span style="color:var(--muted)"><span class="lg-s" style="color:var(--pair)">—</span>joins a pair (same replication, bottom row only)</span>
           <span style="color:var(--est)"><span class="lg-s">●</span>paired differences dᵢ = y₂ᵢ − y₁ᵢ</span>
           <span style="color:var(--truth)"><span class="lg-s">┄</span>true means</span>
           <span style="color:var(--muted)"><span class="lg-s">—</span>zero</span>
@@ -4754,6 +4754,45 @@ function drawPairStrip(stripX0, stripW, pT, yP, mode, run, p) {
   h += svgIntervalMark(barX, yP(iv.hi), yP(iv.lo), yP(iv.mean), hit);
   return h;
 }
+// The E[h] label beside its dashed line, at whichever spot its text box crosses the
+// fewest drawn marks: above or below the line at the plot's right end, then at its
+// left end, then at points between them, from right to left in 20px steps, with ties
+// going to the first in that order. `segs` are line segments [x1, y1,
+// x2, y2] and `dots` circles [x, y, r]; a spot whose box leaves the plot's rows
+// yT to yB is never taken while another fits. The label is drawn after the marks with a
+// white halo, and so a mark it still crosses (a dense run can crowd every spot)
+// cannot bring the text's contrast down to that of teal on teal.
+function eLineLabel(txt, yLine, xL, xR, yT, yB, segs, dots) {
+  const w = txt.length * 6.1, asc = 8, desc = 2;
+  const spots = [
+    { x: xR - 3, a: 'end', y: yLine - 4 }, { x: xR - 3, a: 'end', y: yLine + 12 },
+    { x: xL + 3, a: 'start', y: yLine - 4 }, { x: xL + 3, a: 'start', y: yLine + 12 },
+  ];
+  for (let x = xR - 23; x - w > xL + 3; x -= 20) spots.push({ x: x, a: 'end', y: yLine - 4 }, { x: x, a: 'end', y: yLine + 12 });
+  const segHits = (b, q) => {
+    // Liang-Barsky clip of the segment against the box.
+    const dx = q[2] - q[0], dy = q[3] - q[1];
+    let t0 = 0, t1 = 1;
+    const ps = [-dx, dx, -dy, dy], qs = [q[0] - b.x0, b.x1 - q[0], q[1] - b.y0, b.y1 - q[1]];
+    for (let i = 0; i < 4; i++) {
+      if (ps[i] === 0) { if (qs[i] < 0) return false; continue; }
+      const t = qs[i] / ps[i];
+      if (ps[i] < 0) { if (t > t1) return false; if (t > t0) t0 = t; } else { if (t < t0) return false; if (t < t1) t1 = t; }
+    }
+    return true;
+  };
+  const dotHits = (b, d) => {
+    const cx = Math.min(Math.max(d[0], b.x0), b.x1), cy = Math.min(Math.max(d[1], b.y0), b.y1);
+    return (d[0] - cx) ** 2 + (d[1] - cy) ** 2 <= d[2] * d[2];
+  };
+  let best = spots[0], bestN = Infinity;
+  spots.forEach(sp => {
+    const x0 = sp.a === 'end' ? sp.x - w : sp.x, b = { x0: x0 - 1, x1: x0 + w + 1, y0: sp.y - asc - 1, y1: sp.y + desc + 1 };
+    const nHit = (b.y0 < yT || b.y1 > yB ? 1e6 : 0) + segs.filter(q => segHits(b, q)).length + dots.filter(d => dotHits(b, d)).length;
+    if (nHit < bestN) { best = sp; bestN = nHit; }
+  });
+  return `<text x="${best.x}" y="${best.y}" text-anchor="${best.a}" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}" paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round">${txt}</text>`;
+}
 function drawAvFig(run, p) {
   const mode = AVS.mode;
   // The right margin carries a rug-and-interval strip for whichever arm is shown;
@@ -4781,7 +4820,6 @@ function drawAvFig(run, p) {
   let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
   h += `<line x1="${xP(0.5)}" y1="${pT}" x2="${xP(0.5)}" y2="${pT + cH}" stroke="${C.pair}" stroke-width="1" stroke-dasharray="2,3"/>`;
   h += `<line x1="${pL}" y1="${yP(f.mean)}" x2="${pL + cW + stripGap + stripW}" y2="${yP(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-  h += `<text x="${pL + cW - 3}" y="${yP(f.mean) - 4}" text-anchor="end" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}">E[h] = ${f.mean.toFixed(4)}</text>`;
   h += `<path d="${cv.pts.map((q, i) => (i ? 'L' : 'M') + xP(q[0]).toFixed(1) + ',' + yP(q[1]).toFixed(1)).join('')}" fill="none" stroke="${C.truth}" stroke-width="2"/>`;
   const m = run ? Math.min(MAXP, p.n) : 0;
   // A σₑ re-evaluation can push a pair's dot, or the strip's own rug and
@@ -4812,6 +4850,11 @@ function drawAvFig(run, p) {
   hClip += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
   h += `<defs><clipPath id="av-fig-clip"><rect x="${pL}" y="${pT}" width="${cW + stripGap + stripW}" height="${cH}"/></clipPath></defs>`;
   h += `<g clip-path="url(#av-fig-clip)">${hClip}</g>`;
+  // The label avoids the h(u) curve and the dots, not the pale connectors.
+  const figSegs = [], figDots = [];
+  for (let i = 1; i < cv.pts.length; i++) figSegs.push([xP(cv.pts[i - 1][0]), yP(cv.pts[i - 1][1]), xP(cv.pts[i][0]), yP(cv.pts[i][1])]);
+  for (let i = 0; i < m; i++) { figDots.push([secondX(i), secondY(i), 3.3]); figDots.push([xP(run.u[i]), yP(run.ya[i]), 3]); }
+  h += eLineLabel('E[h] = ' + f.mean.toFixed(4), yP(f.mean), pL, pL + cW, pT, pT + cH, figSegs, figDots);
   if (run) {
     const ivMode = mode === 'av' ? run.av : run.ind, ivHit = mode === 'av' ? run.hitAv : run.hitInd;
     h += intervalMeanDot(pL + cW + stripGap + stripW * 0.75, yP(ivMode.mean), ivHit);
@@ -4840,8 +4883,8 @@ function avSeqLegendHtml(mode, view) {
   const rugLabel = mode === 'av' ? 'z (antithetic)' : 'w (independent)';
   return `<span style="color:${C.est}"><span class="lg-s">●</span>first of a pair</span>`
     + `<span style="color:${C.est}"><span class="lg-s">○</span>second</span>`
-    + (view === 'pairs' ? `<span style="color:${C.pair}"><span class="lg-s">|</span>joins a pair</span>`
-      : `<span style="color:${C.pair}"><span class="lg-s">—</span>outputs in draw order</span>`)
+    + (view === 'pairs' ? `<span style="color:${C.muted}"><span class="lg-s" style="color:${C.pair}">|</span>joins a pair</span>`
+      : `<span style="color:${C.muted}"><span class="lg-s" style="color:${C.pair}">—</span>outputs in draw order</span>`)
     + `<span style="color:${C.truth}"><span class="lg-s">━</span>pair means</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">‒</span>pair means ${rugLabel} (strip rug)</span>`
     + `<span style="color:${C.truth}"><span class="lg-s">┄</span>E[h]</span>`
@@ -4878,14 +4921,15 @@ function drawAvSeq(run, p) {
   const yP = y => pT + cH - (y - lo) / (hi - lo) * cH;
   let h = `<rect x="${pL}" y="${pT}" width="${cW}" height="${cH}" fill="${C.bg}" rx="3"/>`;
   h += `<line x1="${pL}" y1="${yP(f.mean)}" x2="${pL + cW + stripGap + stripW}" y2="${yP(f.mean)}" stroke="${C.truth}" stroke-width="1.3" stroke-dasharray="4,3"/>`;
-  h += `<text x="${pL + cW - 3}" y="${yP(f.mean) - 4}" text-anchor="end" fill="${C.truth}" font-size="10" font-weight="700" font-family="${FF_MONO}">E[h] = ${f.mean.toFixed(4)}</text>`;
   const dec = decFor(hi - lo);
   for (let i = 0; i <= 3; i++) { const y = lo + (hi - lo) * i / 3; h += `<text x="${pL - 5}" y="${yP(y) + 3.5}" text-anchor="end" fill="${C.muted}" font-size="9" font-family="${FF_MONO}">${y.toFixed(dec)}</text>`; }
   h += `<text x="${pL + cW / 2}" y="${pT + cH + 28}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}">${view === 'pairs' ? 'pair' : 'draw order'}</text>`;
   const yLX = 13, yLY = pT + cH / 2;
   h += `<text x="${yLX}" y="${yLY}" text-anchor="middle" fill="${C.muted}" font-size="10" font-family="${FF_SANS}" transform="rotate(-90,${yLX},${yLY})">y = h(u) + noise</text>`;
 
+  const eLbl = 'E[h] = ' + f.mean.toFixed(4);
   if (!run) {
+    h += eLineLabel(eLbl, yP(f.mean), pL, pL + cW, pT, pT + cH, [], []);
     h += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
     h += `<text x="${pL + cW / 2}" y="${pT + cH / 2}" text-anchor="middle" fill="${C.muted}" font-size="11" font-family="${FF_SANS}">Run an experiment to see one run's outputs in draw order</text>`;
     svgSet($('av-seq'), W, H, h);
@@ -4937,6 +4981,11 @@ function drawAvSeq(run, p) {
   hClip += drawPairStrip(pL + cW + stripGap, stripW, pT, yP, mode, run, p);
   h += `<defs><clipPath id="av-seq-clip"><rect x="${pL}" y="${pT}" width="${cW + stripGap + stripW}" height="${cH}"/></clipPath></defs>`;
   h += `<g clip-path="url(#av-seq-clip)">${hClip}</g>`;
+  // The label avoids the pair-mean line and the dots, not the pale connectors.
+  const seqSegs = [], seqDots = [];
+  for (let j = 1; j < drawCount / 2; j++) seqSegs.push([xMean(j - 1), yP(pairMeans[j - 1]), xMean(j), yP(pairMeans[j])]);
+  for (let i = 0; i < drawCount; i++) seqDots.push([xOf(i), yP(seq[i]), r + 0.7]);
+  h += eLineLabel(eLbl, yP(f.mean), pL, pL + cW, pT, pT + cH, seqSegs, seqDots);
   const ivMode = mode === 'av' ? run.av : run.ind, ivHit = mode === 'av' ? run.hitAv : run.hitInd;
   h += intervalMeanDot(pL + cW + stripGap + stripW * 0.75, yP(ivMode.mean), ivHit);
   (view === 'pairs' ? [1, n] : [1, n, count]).forEach(k => { h += `<text x="${xP(k)}" y="${pT + cH + 14}" text-anchor="middle" fill="${C.muted}" font-size="9.5" font-family="${FF_MONO}">${k}</text>`; });
