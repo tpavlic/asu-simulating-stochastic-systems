@@ -257,10 +257,11 @@ FIG_TIDY.pairsByRep = `
 # One column per matched pair: the first of each pair (design A) as a filled dot, the second
 # (design B) as a hollow dot, joined by a dashed segment; avg_line adds the pair averages as a
 # heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each replication has
-# its own column, the pair's two side by side and all of them joined in run order by a light
-# line, with each pair average between its two; ids then label the 2n columns. ci = c(lower,
-# center, upper) adds a strip at the right edge: a tick for each pair average and that interval,
-# in the flag color and dashed when ci_flag is TRUE.
+# its own column in run order, the pair's two side by side and joined by a solid segment, with
+# each pair average between its two; ids then label the 2n columns. Consecutive pairs are not
+# joined, because nothing ties one pair to the next. ci = c(lower, center, upper) adds a strip
+# at the right edge: a tick for each pair average and that interval, in the flag color and
+# dashed when ci_flag is TRUE.
 fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
                              labels = c("A", "B"), avg_line = FALSE, ylab = "Replication outcome",
                              ref = NA, order = FALSE, ci = NULL, ci_flag = FALSE) {
@@ -275,22 +276,17 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
     mutate(design = factor(design, levels = labels)) %>%
     filter(is.finite(y))
   keep <- seq(1, cols, by = max(1, ceiling(cols / 20)))
-  shown_lines <- c(if (order) "run order", if (avg_line) "pair average")
+  shown_lines <- if (avg_line) "pair average" else character(0)
   p <- ggplot()
   if (isTRUE(is.finite(ref))) p <- p + geom_hline(yintercept = ref, linetype = "dashed", color = FIG_MUTED)
-  if (order) {
-    run <- tibble(x = as.vector(rbind(d$xa, d$xb)), y = as.vector(rbind(d$a, d$b))) %>% filter(is.finite(y))
-    p <- p + geom_line(data = run, aes(x = x, y = y, color = "run order"), linewidth = 0.4)
-  } else {
-    p <- p + geom_segment(data = both, aes(x = xa, xend = xa, y = a, yend = b), linetype = "dashed",
-                          color = FIG_MUTED)
-  }
+  p <- p + geom_segment(data = both, aes(x = xa, xend = xb, y = a, yend = b),
+                        linetype = if (order) "solid" else "dashed", color = FIG_MUTED)
   if (avg_line) {
     p <- p + geom_line(data = mutate(both, m = (a + b) / 2, xm = (xa + xb) / 2),
                        aes(x = xm, y = m, color = "pair average"), linewidth = 1.2)
   }
   if (length(shown_lines)) {
-    p <- p + scale_color_manual(values = c("run order" = FIG_MUTED, "pair average" = FIG_TRUTH)[shown_lines],
+    p <- p + scale_color_manual(values = c("pair average" = FIG_TRUTH)[shown_lines],
                                 breaks = shown_lines, name = NULL)
   }
   if (length(ci) == 3 && all(is.finite(ci))) {

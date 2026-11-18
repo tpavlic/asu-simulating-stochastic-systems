@@ -241,8 +241,9 @@ FIG_R.pairsByRep = `
 # Matched pairs by replication: the first of each pair (design A) as a filled dot, the second
 # (design B) as a hollow dot, and a dashed segment joining the two; avg_line adds the pair
 # averages as a heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each
-# replication has its own column, the pair's two side by side and all of them joined in run
-# order by a light line, with each pair average between its two; ids then label the 2n columns.
+# replication has its own column in run order, the pair's two side by side and joined by a
+# solid segment, with each pair average between its two; ids then label the 2n columns.
+# Consecutive pairs are not joined, because nothing ties one pair to the next.
 # ci = c(lower, center, upper) adds a strip at the right edge: a tick for each pair average and
 # that interval, in the flag color and dashed when ci_flag is TRUE.
 fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
@@ -269,12 +270,8 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   plot(c(0.5, cols + 0.5 + if (strip) 1.8 else 0), fig_ylim(c(a, b, if (has_ref) ref, if (strip) ci), 0.12),
        type = "n", axes = FALSE, xlab = xlab, ylab = ylab, main = title)
   if (has_ref) abline(h = ref, lty = 2, col = FIG_MUTED)
-  if (order) {
-    lines(as.vector(rbind(xa, xb)), as.vector(rbind(a, b)), col = FIG_MUTED)
-  } else {
-    both <- is.finite(a) & is.finite(b)
-    segments(xa[both], a[both], xa[both], b[both], lty = 2, col = FIG_MUTED)
-  }
+  both <- is.finite(a) & is.finite(b)
+  segments(xa[both], a[both], xb[both], b[both], lty = if (order) 1 else 2, col = FIG_MUTED)
   if (avg_line) lines(xm, (a + b) / 2, col = FIG_TRUTH, lwd = 3)
   points(xa, a, pch = 19, col = FIG_EST)
   points(xb, b, pch = 21, col = FIG_EST, bg = "white")
@@ -296,9 +293,6 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   lty <- c(NA, NA)
   lwd <- c(NA, NA)
   col <- c(FIG_EST, FIG_EST)
-  if (order) {
-    names <- c(names, "run order"); pch <- c(pch, NA); lty <- c(lty, 1); lwd <- c(lwd, 1); col <- c(col, FIG_MUTED)
-  }
   if (avg_line) {
     names <- c(names, "pair average"); pch <- c(pch, NA); lty <- c(lty, 1); lwd <- c(lwd, 3); col <- c(col, FIG_TRUTH)
   }

@@ -27,7 +27,7 @@
 //   fig_pairs_by_rep(a, b, ids; xlab, title, labels, avg_line, ylab, ref) and
 //   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs; avg_line
 //     draws the pair averages as a heavy line, ref a dashed line, and order
-//     each replication in its own column, joined in run order.
+//     each replication in its own column in run order, each pair joined.
 //   fig_hist(x, edges, xlab, title), fig_ecdf(x, xlab, title),
 //   fig_box(x, xlab, title), fig_qq(x, ylab, title; xlab).
 //   fig_value_edges(x): bin edges giving one bin per value, on the
@@ -145,7 +145,7 @@ function oneFigures(r, L) {
           avg_line: L.bool(true), ylab: L.str(F.pairs.ylab), ref: F.mu0 && (!r.transform || r.transform === 'none') ? 'mu0' : undefined,
           order: order ? L.bool(true) : undefined, ci: strip ? vecOf(L, [lo, m, hi]) : undefined,
           ci_flag: strip && F.mu0 ? orOf(L, lo + ' > mu0', hi + ' < mu0') : undefined }));
-    notes.push('The antithetic pairs, the first replication of each filled and the second hollow' + (order ? ', in run order and joined in sequence,' : '') +
+    notes.push('The antithetic pairs, the first replication of each filled and the second hollow' + (order ? ', in run order with each pair joined,' : '') +
       ' with the pair averages as a heavy line' + (F.mu0 && (!r.transform || r.transform === 'none') ? ' and mu0 dashed' : '') +
       (strip ? ', and at the right edge a tick for each pair average beside the interval.' : '.'));
     fig.push('pairsByRep');

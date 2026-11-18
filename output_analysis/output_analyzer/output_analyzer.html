@@ -26936,9 +26936,10 @@ function fig_pairs_by_rep(a, b, ids, o)
 % filled dot, design B as a hollow dot, joined by a dashed line.
 % Options: xlab, title, labels (the two legend names), avg_line (the pair
 % averages as a heavy line), ylab, ref (a dashed horizontal line), and order
-% (each replication in its own column, the pair's two side by side and all
-% of them joined in run order by a light line, with each pair average
-% between its two; ids then label the 2n columns), ci ([lower, center,
+% (each replication in its own column in run order, the pair's two side by
+% side and joined by a solid segment, with each pair average between its
+% two; consecutive pairs are not joined, because nothing ties one pair to
+% the next; ids then label the 2n columns), ci ([lower, center,
 % upper]: a strip at the right edge with a tick for each pair average and
 % that interval), and ci_flag (the interval in the flag color, dashed).
 if nargin < 4, o = struct(); end
@@ -26981,13 +26982,9 @@ end
 names = fig_opt(o, 'labels', {'A', 'B'});
 names = names(:)';
 handles = [];
-if order
-    handles = plot(reshape([xa'; xb'], [], 1), reshape([a'; b'], [], 1), '-', 'Color', c.muted);
-    names = [names, {'run order'}];
-else
-    [px, py] = fig_segments(xa, a, xa, b);
-    plot(px, py, 'Color', c.muted, 'LineStyle', '--');
-end
+if order, ls = '-'; else, ls = '--'; end
+[px, py] = fig_segments(xa, a, xb, b);
+plot(px, py, 'Color', c.muted, 'LineStyle', ls);
 if fig_opt(o, 'avg_line', false)
     handles = [handles, plot(xm, (a + b) / 2, '-', 'Color', c.truth, 'LineWidth', 3)];
     names = [names, {'pair average'}];
@@ -27819,9 +27816,9 @@ def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replicati
                      order=False, ci=None, ci_flag=False):
     """Each matched pair as a filled dot (A) and a hollow dot (B) joined by a dashed segment;
     avg_line adds the pair averages as a heavy line, and a finite ref a dashed horizontal line.
-    With order=True, each replication has its own column, the pair's two side by side and all
-    of them joined in run order by a light line, with each pair average between its two; ids
-    then label the 2n columns. ci = (lower, center, upper) adds a strip at the right edge: a tick
+    With order=True, each replication has its own column in run order, the pair's two side by
+    side and joined by a solid segment, with each pair average between its two; ids then label
+    the 2n columns. Consecutive pairs are not joined, because nothing ties one pair to the next. ci = (lower, center, upper) adds a strip at the right edge: a tick
     for each pair average and that interval, in the flag color and dashed when ci_flag."""
     import matplotlib.pyplot as plt
     a = np.asarray(a, dtype=float).ravel()
@@ -27839,8 +27836,9 @@ def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replicati
     if ref is not None and np.isfinite(ref):
         ax.axhline(ref, color=FIG_MUTED, linestyle="--", linewidth=1.2)
     if order:
-        ax.plot(np.column_stack([xa, xb]).ravel(), np.column_stack([a, b]).ravel(), color=FIG_MUTED,
-                linewidth=1, label="run order")
+        both = np.isfinite(a) & np.isfinite(b)
+        ax.plot(np.vstack([xa[both], xb[both]]), np.vstack([a[both], b[both]]), color=FIG_MUTED,
+                linewidth=1)
     else:
         ax.vlines(xa, np.fmin(a, b), np.fmax(a, b), color=FIG_MUTED, linestyle="--", linewidth=1)
     if avg_line:
@@ -28521,8 +28519,9 @@ FIG_R.pairsByRep = `
 # Matched pairs by replication: the first of each pair (design A) as a filled dot, the second
 # (design B) as a hollow dot, and a dashed segment joining the two; avg_line adds the pair
 # averages as a heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each
-# replication has its own column, the pair's two side by side and all of them joined in run
-# order by a light line, with each pair average between its two; ids then label the 2n columns.
+# replication has its own column in run order, the pair's two side by side and joined by a
+# solid segment, with each pair average between its two; ids then label the 2n columns.
+# Consecutive pairs are not joined, because nothing ties one pair to the next.
 # ci = c(lower, center, upper) adds a strip at the right edge: a tick for each pair average and
 # that interval, in the flag color and dashed when ci_flag is TRUE.
 fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
@@ -28549,12 +28548,8 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   plot(c(0.5, cols + 0.5 + if (strip) 1.8 else 0), fig_ylim(c(a, b, if (has_ref) ref, if (strip) ci), 0.12),
        type = "n", axes = FALSE, xlab = xlab, ylab = ylab, main = title)
   if (has_ref) abline(h = ref, lty = 2, col = FIG_MUTED)
-  if (order) {
-    lines(as.vector(rbind(xa, xb)), as.vector(rbind(a, b)), col = FIG_MUTED)
-  } else {
-    both <- is.finite(a) & is.finite(b)
-    segments(xa[both], a[both], xa[both], b[both], lty = 2, col = FIG_MUTED)
-  }
+  both <- is.finite(a) & is.finite(b)
+  segments(xa[both], a[both], xb[both], b[both], lty = if (order) 1 else 2, col = FIG_MUTED)
   if (avg_line) lines(xm, (a + b) / 2, col = FIG_TRUTH, lwd = 3)
   points(xa, a, pch = 19, col = FIG_EST)
   points(xb, b, pch = 21, col = FIG_EST, bg = "white")
@@ -28576,9 +28571,6 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
   lty <- c(NA, NA)
   lwd <- c(NA, NA)
   col <- c(FIG_EST, FIG_EST)
-  if (order) {
-    names <- c(names, "run order"); pch <- c(pch, NA); lty <- c(lty, 1); lwd <- c(lwd, 1); col <- c(col, FIG_MUTED)
-  }
   if (avg_line) {
     names <- c(names, "pair average"); pch <- c(pch, NA); lty <- c(lty, 1); lwd <- c(lwd, 3); col <- c(col, FIG_TRUTH)
   }
@@ -29206,10 +29198,11 @@ FIG_TIDY.pairsByRep = `
 # One column per matched pair: the first of each pair (design A) as a filled dot, the second
 # (design B) as a hollow dot, joined by a dashed segment; avg_line adds the pair averages as a
 # heavy line, and a finite ref a dashed horizontal line. With order = TRUE, each replication has
-# its own column, the pair's two side by side and all of them joined in run order by a light
-# line, with each pair average between its two; ids then label the 2n columns. ci = c(lower,
-# center, upper) adds a strip at the right edge: a tick for each pair average and that interval,
-# in the flag color and dashed when ci_flag is TRUE.
+# its own column in run order, the pair's two side by side and joined by a solid segment, with
+# each pair average between its two; ids then label the 2n columns. Consecutive pairs are not
+# joined, because nothing ties one pair to the next. ci = c(lower, center, upper) adds a strip
+# at the right edge: a tick for each pair average and that interval, in the flag color and
+# dashed when ci_flag is TRUE.
 fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs by replication",
                              labels = c("A", "B"), avg_line = FALSE, ylab = "Replication outcome",
                              ref = NA, order = FALSE, ci = NULL, ci_flag = FALSE) {
@@ -29224,22 +29217,17 @@ fig_pairs_by_rep <- function(a, b, ids, xlab = "Replication id", title = "Pairs 
     mutate(design = factor(design, levels = labels)) %>%
     filter(is.finite(y))
   keep <- seq(1, cols, by = max(1, ceiling(cols / 20)))
-  shown_lines <- c(if (order) "run order", if (avg_line) "pair average")
+  shown_lines <- if (avg_line) "pair average" else character(0)
   p <- ggplot()
   if (isTRUE(is.finite(ref))) p <- p + geom_hline(yintercept = ref, linetype = "dashed", color = FIG_MUTED)
-  if (order) {
-    run <- tibble(x = as.vector(rbind(d$xa, d$xb)), y = as.vector(rbind(d$a, d$b))) %>% filter(is.finite(y))
-    p <- p + geom_line(data = run, aes(x = x, y = y, color = "run order"), linewidth = 0.4)
-  } else {
-    p <- p + geom_segment(data = both, aes(x = xa, xend = xa, y = a, yend = b), linetype = "dashed",
-                          color = FIG_MUTED)
-  }
+  p <- p + geom_segment(data = both, aes(x = xa, xend = xb, y = a, yend = b),
+                        linetype = if (order) "solid" else "dashed", color = FIG_MUTED)
   if (avg_line) {
     p <- p + geom_line(data = mutate(both, m = (a + b) / 2, xm = (xa + xb) / 2),
                        aes(x = xm, y = m, color = "pair average"), linewidth = 1.2)
   }
   if (length(shown_lines)) {
-    p <- p + scale_color_manual(values = c("run order" = FIG_MUTED, "pair average" = FIG_TRUTH)[shown_lines],
+    p <- p + scale_color_manual(values = c("pair average" = FIG_TRUTH)[shown_lines],
                                 breaks = shown_lines, name = NULL)
   }
   if (length(ci) == 3 && all(is.finite(ci))) {
@@ -29629,7 +29617,7 @@ fig_batches <- function(x, y, starts, ends, means, xlab, ylab, title, step = FAL
 //   fig_pairs_by_rep(a, b, ids; xlab, title, labels, avg_line, ylab, ref) and
 //   fig_pairs_slopes(a, b; label_a, label_b, title): matched pairs; avg_line
 //     draws the pair averages as a heavy line, ref a dashed line, and order
-//     each replication in its own column, joined in run order.
+//     each replication in its own column in run order, each pair joined.
 //   fig_hist(x, edges, xlab, title), fig_ecdf(x, xlab, title),
 //   fig_box(x, xlab, title), fig_qq(x, ylab, title; xlab).
 //   fig_value_edges(x): bin edges giving one bin per value, on the
@@ -29747,7 +29735,7 @@ function oneFigures(r, L) {
           avg_line: L.bool(true), ylab: L.str(F.pairs.ylab), ref: F.mu0 && (!r.transform || r.transform === 'none') ? 'mu0' : undefined,
           order: order ? L.bool(true) : undefined, ci: strip ? vecOf(L, [lo, m, hi]) : undefined,
           ci_flag: strip && F.mu0 ? orOf(L, lo + ' > mu0', hi + ' < mu0') : undefined }));
-    notes.push('The antithetic pairs, the first replication of each filled and the second hollow' + (order ? ', in run order and joined in sequence,' : '') +
+    notes.push('The antithetic pairs, the first replication of each filled and the second hollow' + (order ? ', in run order with each pair joined,' : '') +
       ' with the pair averages as a heavy line' + (F.mu0 && (!r.transform || r.transform === 'none') ? ' and mu0 dashed' : '') +
       (strip ? ', and at the right edge a tick for each pair average beside the interval.' : '.'));
     fig.push('pairsByRep');
@@ -39593,8 +39581,9 @@ function drawPairs(d) {
     '; antithetic:independent variance ratio is <strong>' + esc(two(st.ratio)) + '</strong> (ideally ratio &lt; 1). Independent pairs have a ratio of about 1, but anticorrelated pairs (r &lt; 0) have a ratio below 1. ' +
     'A ratio above 1 means the antithetic pairing increased the variance relative to independent pairs.';
   // As pairs, each pair is one column; in run order, each replication is its
-  // own column, the pair's two side by side, joined in sequence by a light
-  // line, with each pair average drawn between its two replications.
+  // own column, the pair's two side by side and joined by a light line, with
+  // each pair average drawn between its two replications. Consecutive pairs
+  // are not joined, because nothing ties one pair to the next.
   const order = extra.pairsView === 'order';
   const ks = Array.from({ length: n }, (_, k) => k + 1);
   const xa = order ? ks.map(k => 2 * k - 1) : ks, xb = order ? ks.map(k => 2 * k) : ks, xm = order ? ks.map(k => 2 * k - 0.5) : ks;
@@ -39638,11 +39627,11 @@ function drawPairs(d) {
     if (mu0 != null) {
       svgEl('line', { x1: 0, x2: f.iw, y1: sy(mu0), y2: sy(mu0), stroke: cText, 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, f.inner);
     }
-    const seqX = [], seqY = [];
     if (order) {
-      for (let k = 0; k < n; k++) { seqX.push(xa[k], xb[k]); seqY.push(a[k], b[k]); }
-      svgEl('polyline', { points: seqX.map((x, i) => sx(x).toFixed(1) + ',' + sy(seqY[i]).toFixed(1)).join(' '), fill: 'none', stroke: cPair, 'stroke-width': 1.2,
-        'stroke-linejoin': 'round', class: 'm-pair-seq' }, f.inner);
+      const gLink = svgEl('g', { class: 'm-pair-link' }, f.inner);
+      for (let k = 0; k < n; k++) {
+        svgEl('line', { x1: sx(xa[k]), x2: sx(xb[k]), y1: sy(a[k]), y2: sy(b[k]), stroke: cPair, 'stroke-width': 1.2, 'stroke-linecap': 'round' }, gLink);
+      }
     } else {
       // The link runs between the two dots' rims, and so it never shows
       // through the hollow dot.
@@ -39682,9 +39671,7 @@ function drawPairs(d) {
           color: c, width: 2.5, dash: flagged, label: intName + (flagged ? ' (excludes mu0)' : '') },
         { kind: 'points', x: [ciX], y: [ti.mean], color: c, hollow: flagged, label: d.np ? 'pseudo-median of the pair averages' : 'mean of the pair averages' });
     }
-    f.series.push(order
-      ? { kind: 'line', x: seqX, y: seqY, color: cPair, width: 1.2, label: 'replications in run order' }
-      : { kind: 'segments', x0: ks, x1: ks, y0: a.slice(), y1: b.slice(), color: cPair, label: 'pair' },
+    f.series.push({ kind: 'segments', x0: xa.slice(), x1: xb.slice(), y0: a.slice(), y1: b.slice(), color: cPair, width: order ? 1.2 : undefined, label: 'pair' },
     { kind: 'line', x: xm.slice(), y: avg, color: cTruth, width: 3, label: 'pair average' },
     { kind: 'points', x: xb.slice(), y: b.slice(), color: cEst, hollow: true, label: 'second replication of the pair' },
     { kind: 'points', x: xa.slice(), y: a.slice(), color: cEst, label: 'first replication of the pair' });
@@ -39704,7 +39691,6 @@ function drawPairs(d) {
     { swatch: 'dot', color: '--est', label: 'first replication of the pair' },
     { swatch: 'hollow', color: '--est', label: 'second replication of the pair' }
   ];
-  if (order) items.push({ swatch: 'thin', color: '--pair', label: 'replications in run order' });
   items.push({ swatch: 'line', color: '--truth', label: 'pair average, the replication value analyzed' });
   if (ti) {
     items.push({ swatch: 'thin', color: '--truth', label: 'each pair average, at the right edge' },
@@ -39715,8 +39701,8 @@ function drawPairs(d) {
   const strip = ti ? ' At the right edge, a tick for each pair average and the ' + intName + ' formed from them, on the scale of the replications.' : '';
   const scale = shared ? ' The datasets loaded from this file share the scale, and so switching between them keeps every mark in place.' : '';
   els.pairsCap.textContent = order
-    ? 'Each replication in the order it was run, the first of each pair filled and the second hollow, joined in sequence by the thin line; the heavy line is each pair’s average, drawn between its two replications. ' +
-      'In antithetic pairs the thin line zigzags, a busy run followed by a quiet one, and the pair averages stay closer to the mean than the replications do.' + strip + scale
+    ? 'Each replication in the order it was run, the first of each pair filled and the second hollow, and the thin line joining them the gap between the two; the heavy line is each pair’s average, drawn between its two replications. ' +
+      'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run followed by a quiet one, and so the pair averages stay closer to the mean than the replications do.' + strip + scale
     : 'Each column is one pair: its first replication filled, its second hollow, and the line joining them the gap between the two. ' +
       'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run with a quiet one, and so the heavy line of pair averages varies less than the dots do.' + strip + scale;
 }

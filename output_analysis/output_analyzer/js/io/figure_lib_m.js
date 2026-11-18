@@ -393,9 +393,10 @@ function fig_pairs_by_rep(a, b, ids, o)
 % filled dot, design B as a hollow dot, joined by a dashed line.
 % Options: xlab, title, labels (the two legend names), avg_line (the pair
 % averages as a heavy line), ylab, ref (a dashed horizontal line), and order
-% (each replication in its own column, the pair's two side by side and all
-% of them joined in run order by a light line, with each pair average
-% between its two; ids then label the 2n columns), ci ([lower, center,
+% (each replication in its own column in run order, the pair's two side by
+% side and joined by a solid segment, with each pair average between its
+% two; consecutive pairs are not joined, because nothing ties one pair to
+% the next; ids then label the 2n columns), ci ([lower, center,
 % upper]: a strip at the right edge with a tick for each pair average and
 % that interval), and ci_flag (the interval in the flag color, dashed).
 if nargin < 4, o = struct(); end
@@ -438,13 +439,9 @@ end
 names = fig_opt(o, 'labels', {'A', 'B'});
 names = names(:)';
 handles = [];
-if order
-    handles = plot(reshape([xa'; xb'], [], 1), reshape([a'; b'], [], 1), '-', 'Color', c.muted);
-    names = [names, {'run order'}];
-else
-    [px, py] = fig_segments(xa, a, xa, b);
-    plot(px, py, 'Color', c.muted, 'LineStyle', '--');
-end
+if order, ls = '-'; else, ls = '--'; end
+[px, py] = fig_segments(xa, a, xb, b);
+plot(px, py, 'Color', c.muted, 'LineStyle', ls);
 if fig_opt(o, 'avg_line', false)
     handles = [handles, plot(xm, (a + b) / 2, '-', 'Color', c.truth, 'LineWidth', 3)];
     names = [names, {'pair average'}];

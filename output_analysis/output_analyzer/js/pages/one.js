@@ -1153,8 +1153,9 @@ function drawPairs(d) {
     '; antithetic:independent variance ratio is <strong>' + esc(two(st.ratio)) + '</strong> (ideally ratio &lt; 1). Independent pairs have a ratio of about 1, but anticorrelated pairs (r &lt; 0) have a ratio below 1. ' +
     'A ratio above 1 means the antithetic pairing increased the variance relative to independent pairs.';
   // As pairs, each pair is one column; in run order, each replication is its
-  // own column, the pair's two side by side, joined in sequence by a light
-  // line, with each pair average drawn between its two replications.
+  // own column, the pair's two side by side and joined by a light line, with
+  // each pair average drawn between its two replications. Consecutive pairs
+  // are not joined, because nothing ties one pair to the next.
   const order = extra.pairsView === 'order';
   const ks = Array.from({ length: n }, (_, k) => k + 1);
   const xa = order ? ks.map(k => 2 * k - 1) : ks, xb = order ? ks.map(k => 2 * k) : ks, xm = order ? ks.map(k => 2 * k - 0.5) : ks;
@@ -1198,11 +1199,11 @@ function drawPairs(d) {
     if (mu0 != null) {
       svgEl('line', { x1: 0, x2: f.iw, y1: sy(mu0), y2: sy(mu0), stroke: cText, 'stroke-width': 1.5, 'stroke-dasharray': '6,4', class: 'm-ref' }, f.inner);
     }
-    const seqX = [], seqY = [];
     if (order) {
-      for (let k = 0; k < n; k++) { seqX.push(xa[k], xb[k]); seqY.push(a[k], b[k]); }
-      svgEl('polyline', { points: seqX.map((x, i) => sx(x).toFixed(1) + ',' + sy(seqY[i]).toFixed(1)).join(' '), fill: 'none', stroke: cPair, 'stroke-width': 1.2,
-        'stroke-linejoin': 'round', class: 'm-pair-seq' }, f.inner);
+      const gLink = svgEl('g', { class: 'm-pair-link' }, f.inner);
+      for (let k = 0; k < n; k++) {
+        svgEl('line', { x1: sx(xa[k]), x2: sx(xb[k]), y1: sy(a[k]), y2: sy(b[k]), stroke: cPair, 'stroke-width': 1.2, 'stroke-linecap': 'round' }, gLink);
+      }
     } else {
       // The link runs between the two dots' rims, and so it never shows
       // through the hollow dot.
@@ -1242,9 +1243,7 @@ function drawPairs(d) {
           color: c, width: 2.5, dash: flagged, label: intName + (flagged ? ' (excludes mu0)' : '') },
         { kind: 'points', x: [ciX], y: [ti.mean], color: c, hollow: flagged, label: d.np ? 'pseudo-median of the pair averages' : 'mean of the pair averages' });
     }
-    f.series.push(order
-      ? { kind: 'line', x: seqX, y: seqY, color: cPair, width: 1.2, label: 'replications in run order' }
-      : { kind: 'segments', x0: ks, x1: ks, y0: a.slice(), y1: b.slice(), color: cPair, label: 'pair' },
+    f.series.push({ kind: 'segments', x0: xa.slice(), x1: xb.slice(), y0: a.slice(), y1: b.slice(), color: cPair, width: order ? 1.2 : undefined, label: 'pair' },
     { kind: 'line', x: xm.slice(), y: avg, color: cTruth, width: 3, label: 'pair average' },
     { kind: 'points', x: xb.slice(), y: b.slice(), color: cEst, hollow: true, label: 'second replication of the pair' },
     { kind: 'points', x: xa.slice(), y: a.slice(), color: cEst, label: 'first replication of the pair' });
@@ -1264,7 +1263,6 @@ function drawPairs(d) {
     { swatch: 'dot', color: '--est', label: 'first replication of the pair' },
     { swatch: 'hollow', color: '--est', label: 'second replication of the pair' }
   ];
-  if (order) items.push({ swatch: 'thin', color: '--pair', label: 'replications in run order' });
   items.push({ swatch: 'line', color: '--truth', label: 'pair average, the replication value analyzed' });
   if (ti) {
     items.push({ swatch: 'thin', color: '--truth', label: 'each pair average, at the right edge' },
@@ -1275,8 +1273,8 @@ function drawPairs(d) {
   const strip = ti ? ' At the right edge, a tick for each pair average and the ' + intName + ' formed from them, on the scale of the replications.' : '';
   const scale = shared ? ' The datasets loaded from this file share the scale, and so switching between them keeps every mark in place.' : '';
   els.pairsCap.textContent = order
-    ? 'Each replication in the order it was run, the first of each pair filled and the second hollow, joined in sequence by the thin line; the heavy line is each pair’s average, drawn between its two replications. ' +
-      'In antithetic pairs the thin line zigzags, a busy run followed by a quiet one, and the pair averages stay closer to the mean than the replications do.' + strip + scale
+    ? 'Each replication in the order it was run, the first of each pair filled and the second hollow, and the thin line joining them the gap between the two; the heavy line is each pair’s average, drawn between its two replications. ' +
+      'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run followed by a quiet one, and so the pair averages stay closer to the mean than the replications do.' + strip + scale
     : 'Each column is one pair: its first replication filled, its second hollow, and the line joining them the gap between the two. ' +
       'In antithetic pairs the two tend to fall on opposite sides of the mean, a busy run with a quiet one, and so the heavy line of pair averages varies less than the dots do.' + strip + scale;
 }

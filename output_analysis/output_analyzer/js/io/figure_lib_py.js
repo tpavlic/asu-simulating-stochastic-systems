@@ -261,9 +261,9 @@ def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replicati
                      order=False, ci=None, ci_flag=False):
     """Each matched pair as a filled dot (A) and a hollow dot (B) joined by a dashed segment;
     avg_line adds the pair averages as a heavy line, and a finite ref a dashed horizontal line.
-    With order=True, each replication has its own column, the pair's two side by side and all
-    of them joined in run order by a light line, with each pair average between its two; ids
-    then label the 2n columns. ci = (lower, center, upper) adds a strip at the right edge: a tick
+    With order=True, each replication has its own column in run order, the pair's two side by
+    side and joined by a solid segment, with each pair average between its two; ids then label
+    the 2n columns. Consecutive pairs are not joined, because nothing ties one pair to the next. ci = (lower, center, upper) adds a strip at the right edge: a tick
     for each pair average and that interval, in the flag color and dashed when ci_flag."""
     import matplotlib.pyplot as plt
     a = np.asarray(a, dtype=float).ravel()
@@ -281,8 +281,9 @@ def fig_pairs_by_rep(a, b, ids, xlab="Replication id", title="Pairs by replicati
     if ref is not None and np.isfinite(ref):
         ax.axhline(ref, color=FIG_MUTED, linestyle="--", linewidth=1.2)
     if order:
-        ax.plot(np.column_stack([xa, xb]).ravel(), np.column_stack([a, b]).ravel(), color=FIG_MUTED,
-                linewidth=1, label="run order")
+        both = np.isfinite(a) & np.isfinite(b)
+        ax.plot(np.vstack([xa[both], xb[both]]), np.vstack([a[both], b[both]]), color=FIG_MUTED,
+                linewidth=1)
     else:
         ax.vlines(xa, np.fmin(a, b), np.fmax(a, b), color=FIG_MUTED, linestyle="--", linewidth=1)
     if avg_line:
